@@ -56,6 +56,16 @@ function createDb() {
     CREATE INDEX IF NOT EXISTS idx_items_order ON order_items(order_id);
   `);
 
+  // Mevcut kurulumlarda orders tablosuna ödeme kolonlarını ekle (idempotent migration).
+  const orderCols = db.prepare("PRAGMA table_info(orders)").all().map((c) => c.name);
+  if (!orderCols.includes("payment_status")) {
+    db.exec("ALTER TABLE orders ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'pending'");
+  }
+  if (!orderCols.includes("stripe_session_id")) {
+    db.exec("ALTER TABLE orders ADD COLUMN stripe_session_id TEXT");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_stripe_session ON orders(stripe_session_id)");
+  }
+
   // Ürünler boşsa başlangıç verisini yükle
   const count = db.prepare("SELECT COUNT(*) AS c FROM products").get().c;
   if (count === 0) {
@@ -125,10 +135,48 @@ export const createOrder = db.transaction(({ userId, name, address, total, lines
 
 export const getOrdersForUser = (userId) => {
   const orders = db
-    .prepare("SELECT id, name, address, total, status, created_at AS createdAt FROM orders WHERE user_id = ? ORDER BY created_at DESC")
+    .prepare(
+      "SELECT id, name, address, total, status, payment_status AS paymentStatus, created_at AS createdAt FROM orders WHERE user_id = ? ORDER BY created_at DESC"
+    )
     .all(userId);
   const items = db.prepare(
     "SELECT name, size, qty, price, line_total AS lineTotal FROM order_items WHERE order_id = ?"
   );
   return orders.map((o) => ({ ...o, items: items.all(o.id) }));
 };
+
+// Sipariş oluşturulduktan sonra Stripe Checkout Session'ını siparişe bağlar.
+export const attachStripeSession = (orderId, stripeSessionId) =>
+  db.prepare("UPDATE orders SET stripe_session_id = ? WHERE id = ?").run(stripeSessionId, orderId);
+
+// Webhook (ya da success sayfasındaki doğrulama) ödemeyi onaylayınca çağrılır.
+// İdempotent: aynı session için tekrar çağrılsa da sorun çıkarmaz.
+export const markOrderPaidBySession = (stripeSessionId) => {
+  db.prepare("UPDATE orders SET payment_status = 'paid' WHERE stripe_session_id = ? AND payment_status != 'paid'")
+    .run(stripeSessionId);
+  return db
+    .prepare(
+      "SELECT id, user_id AS userId, name, address, total, status, payment_status AS paymentStatus FROM orders WHERE stripe_session_id = ?"
+    )
+    .get(stripeSessionId);
+};
+
+export const getOrderWithItems = (orderId, userId) => {
+  const order = db
+    .prepare(
+      "SELECT id, name, address, total, status, payment_status AS paymentStatus, created_at AS createdAt FROM orders WHERE id = ? AND user_id = ?"
+    )
+    .get(orderId, userId);
+  if (!order) return null;
+  const items = db
+    .prepare("SELECT name, size, qty, price, line_total AS lineTotal FROM order_items WHERE order_id = ?")
+    .all(orderId);
+  return { ...order, items };
+};
+
+export const getOrderByStripeSession = (stripeSessionId, userId) =>
+  db
+    .prepare(
+      "SELECT id, name, address, total, status, payment_status AS paymentStatus, created_at AS createdAt FROM orders WHERE stripe_session_id = ? AND user_id = ?"
+    )
+    .get(stripeSessionId, userId);

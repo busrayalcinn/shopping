@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { ShoppingBag, X, Plus, Minus, User, Search, Check, ArrowRight } from "lucide-react";
+import { ShoppingBag, X, Plus, Minus, User, Search, ArrowRight } from "lucide-react";
 import { SIZES, CATS, MAX_QTY } from "@/lib/constants";
 
 const fmt = (n) => `${n.toLocaleString("tr-TR")} ₺`;
@@ -23,9 +23,8 @@ export default function Store({ products, initialUser = null }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [user, setUser] = useState(initialUser); // sunucudan gelen oturum
   const [authOpen, setAuthOpen] = useState(false);
-  const [checkout, setCheckout] = useState("cart"); // cart | pay | done
+  const [checkout, setCheckout] = useState("cart"); // cart | pay
   const [picker, setPicker] = useState(null);
-  const [lastOrder, setLastOrder] = useState(null);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -72,10 +71,12 @@ export default function Store({ products, initialUser = null }) {
     setCheckout("pay");
   };
 
-  // ---- Backend'e sipariş gönderir; hata mesajını PayForm'a döndürür ----
-  const placeOrder = async (customer) => {
+  // ---- /api/checkout'a sipariş+müşteri bilgisini gönderir, dönen Stripe Checkout
+  // URL'sine yönlendirir. Ödeme Stripe'ın kendi barındırdığı sayfada yapılır;
+  // sonuç /order/success ya da /order/cancel'a geri döner. ----
+  const startStripeCheckout = async (customer) => {
     try {
-      const res = await fetch("/api/orders", {
+      const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -91,16 +92,15 @@ export default function Store({ products, initialUser = null }) {
         setAuthOpen(true);
         return null;
       }
-      if (!res.ok || !data.ok) return data.error || "Sipariş oluşturulamadı.";
-      setLastOrder(data);
-      setCheckout("done");
+      if (!res.ok || !data.ok) return data.error || "Ödeme başlatılamadı.";
+      window.location.assign(data.url); // Stripe'ın barındırdığı ödeme sayfası
       return null;
     } catch {
       return "Sunucuya ulaşılamadı. Bağlantını kontrol edip tekrar dene.";
     }
   };
 
-  const closeCart = () => { setCartOpen(false); if (checkout !== "done") setCheckout("cart"); };
+  const closeCart = () => { setCartOpen(false); setCheckout("cart"); };
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 font-sans">
@@ -227,24 +227,13 @@ export default function Store({ products, initialUser = null }) {
         <CartDrawer onClose={closeCart}>
           <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
             <h2 className="text-sm font-semibold uppercase tracking-widest">
-              {checkout === "done" ? "Sipariş alındı" : checkout === "pay" ? "Ödeme" : "Sepet"}
+              {checkout === "pay" ? "Ödeme" : "Sepet"}
             </h2>
             <button aria-label="Kapat" onClick={closeCart} className="p-1 text-stone-500 hover:text-stone-900"><X size={20} /></button>
           </div>
 
-          {checkout === "done" ? (
-            <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check size={28} /></div>
-              <p className="mt-4 text-lg">Teşekkürler, {user?.name}!</p>
-              <p className="mt-1 text-sm text-stone-500">
-                Sipariş no: {lastOrder?.orderId}<br />Toplam: {fmt(lastOrder?.total || 0)}
-              </p>
-              <button onClick={() => { setCart([]); setCheckout("cart"); setCartOpen(false); }} className="mt-6 rounded-full bg-stone-900 px-6 py-2.5 text-sm text-stone-50 hover:bg-stone-700">
-                Alışverişe devam et
-              </button>
-            </div>
-          ) : checkout === "pay" ? (
-            <PayForm total={total} defaultName={user?.name} onSubmit={placeOrder} onBack={() => setCheckout("cart")} />
+          {checkout === "pay" ? (
+            <PayForm total={total} defaultName={user?.name} onSubmit={startStripeCheckout} onBack={() => setCheckout("cart")} />
           ) : cart.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center text-stone-400">
               <ShoppingBag size={32} />
@@ -427,13 +416,9 @@ function PayForm({ total, defaultName, onSubmit, onBack }) {
       <div className="flex-1 space-y-3 overflow-y-auto px-5 py-5">
         <Field label="Ad Soyad" value={name} onChange={(v) => { setName(v); setError(""); }} placeholder="Adın soyadın" />
         <Field label="Adres" value={address} onChange={(v) => { setAddress(v); setError(""); }} placeholder="Teslimat adresi" />
-        <Field label="Kart numarası" placeholder="0000 0000 0000 0000" inputMode="numeric" />
-        <div className="flex gap-3">
-          <Field label="Son kullanma" placeholder="AA/YY" inputMode="numeric" />
-          <Field label="CVV" placeholder="123" inputMode="numeric" />
-        </div>
         <p className="pt-2 text-xs text-stone-400">
-          Demo: kart bilgisi henüz hiçbir yere gitmiyor. Canlıda bu adımı iyzico / Stripe'a bağlayacaksın.
+          Kart bilgisi Stripe'ın kendi güvenli ödeme sayfasında alınır, bu siteden hiç geçmez.
+          Test modu kartı: <span className="font-mono">4242 4242 4242 4242</span>, ileri bir tarih, herhangi bir CVC.
         </p>
       </div>
       <div className="border-t border-stone-200 px-5 py-5">
@@ -443,7 +428,7 @@ function PayForm({ total, defaultName, onSubmit, onBack }) {
           <span className="font-semibold">{fmt(total)}</span>
         </div>
         <button onClick={submit} disabled={busy} className="w-full rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 hover:bg-stone-700 disabled:opacity-50">
-          {busy ? "İşleniyor…" : `${fmt(total)} öde`}
+          {busy ? "Yönlendiriliyor…" : "Stripe ile öde"}
         </button>
         <button onClick={onBack} className="mt-2 w-full text-center text-xs text-stone-500 hover:text-stone-900">Sepete dön</button>
       </div>
