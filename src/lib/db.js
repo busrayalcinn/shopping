@@ -22,6 +22,14 @@ function createDb() {
       created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
 
+    CREATE TABLE IF NOT EXISTS password_resets (
+      token      TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      used       INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+
     CREATE TABLE IF NOT EXISTS products (
       id     INTEGER PRIMARY KEY,
       name   TEXT NOT NULL,
@@ -118,6 +126,38 @@ export const createUser = ({ email, passwordHash, name }) => {
     .run(id, email, passwordHash, name);
   return { id, email, name };
 };
+
+export const updateUserPassword = (userId, passwordHash) =>
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+
+// ---- Şifre sıfırlama ----
+// Token 30 dakika geçerli, tek kullanımlık. E-posta gönderimi kurulu değilse
+// (bkz. /api/auth/forgot-password) bağlantı sunucu konsoluna yazılır — demo amaçlı.
+const RESET_TTL_MS = 30 * 60 * 1000;
+
+export const createPasswordReset = (userId) => {
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+  db.prepare("INSERT INTO password_resets (token, user_id, expires_at) VALUES (?, ?, ?)")
+    .run(token, userId, expiresAt);
+  return token;
+};
+
+// Süresi geçmemiş, henüz kullanılmamış token'a karşılık gelen kullanıcıyı döner.
+export const getValidPasswordReset = (token) => {
+  const row = db
+    .prepare(
+      `SELECT pr.user_id AS userId, pr.expires_at AS expiresAt, pr.used, u.email
+       FROM password_resets pr JOIN users u ON u.id = pr.user_id
+       WHERE pr.token = ?`
+    )
+    .get(token);
+  if (!row || row.used || new Date(row.expiresAt).getTime() < Date.now()) return null;
+  return row;
+};
+
+export const consumePasswordReset = (token) =>
+  db.prepare("UPDATE password_resets SET used = 1 WHERE token = ?").run(token);
 
 // Sipariş + kalemleri tek transaction'da yazar: ya hepsi ya hiçbiri.
 export const createOrder = db.transaction(({ userId, name, address, total, lines }) => {

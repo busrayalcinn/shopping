@@ -306,9 +306,10 @@ function CartDrawer({ children, onClose }) {
 }
 
 function AuthForm({ current, onAuth, onLogout }) {
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState("login"); // login | register | forgot | forgot-sent
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -335,6 +336,7 @@ function AuthForm({ current, onAuth, onLogout }) {
     const e = email.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { setError("Geçerli bir e-posta adresi gir."); return; }
     if (password.length < 8) { setError("Şifre en az 8 karakter olmalı."); return; }
+    if (mode === "register" && password !== confirmPassword) { setError("Şifreler eşleşmiyor."); return; }
 
     setBusy(true);
     setError("");
@@ -353,6 +355,68 @@ function AuthForm({ current, onAuth, onLogout }) {
       setBusy(false);
     }
   };
+
+  const forgotSubmit = async () => {
+    const e = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { setError("Geçerli bir e-posta adresi gir."); return; }
+
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e }),
+      });
+      // Bu endpoint e-posta kayıtlı olsa da olmasa da her zaman aynı genel mesajla döner
+      await res.json();
+      setMode("forgot-sent");
+    } catch {
+      setError("Sunucuya ulaşılamadı. Tekrar dene.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (mode === "forgot-sent") {
+    return (
+      <div>
+        <h3 className="text-lg font-medium">Bağlantı gönderildi</h3>
+        <p className="mt-2 text-sm text-stone-500">
+          Bu e-posta sistemde kayıtlıysa, şifre sıfırlama bağlantısı gönderildi.
+        </p>
+        <button onClick={() => { setMode("login"); setError(""); }} className="mt-5 w-full rounded-full border border-stone-300 py-2.5 text-sm hover:bg-stone-100">
+          Girişe dön
+        </button>
+      </div>
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <div>
+        <h3 className="text-lg font-medium">Şifremi unuttum</h3>
+        <div className="mt-5 space-y-3">
+          <input
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setError(""); }}
+            onKeyDown={(e) => e.key === "Enter" && forgotSubmit()}
+            placeholder="E-posta"
+            type="email"
+            autoComplete="email"
+            className="w-full rounded border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-stone-900"
+          />
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <button onClick={forgotSubmit} disabled={busy} className="w-full rounded-full bg-stone-900 py-2.5 text-sm font-medium text-stone-50 hover:bg-stone-700 disabled:opacity-50">
+            {busy ? "Gönderiliyor…" : "Sıfırlama bağlantısı gönder"}
+          </button>
+        </div>
+        <button onClick={() => { setMode("login"); setError(""); }} className="mt-4 w-full text-center text-xs text-stone-500 hover:text-stone-900">
+          Girişe dön
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -377,12 +441,28 @@ function AuthForm({ current, onAuth, onLogout }) {
         <input
           value={password}
           onChange={(e) => { setPassword(e.target.value); setError(""); }}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
+          onKeyDown={(e) => e.key === "Enter" && (mode === "register" ? confirmPassword && submit() : submit())}
           type="password"
           placeholder="Şifre (en az 8 karakter)"
           autoComplete={mode === "login" ? "current-password" : "new-password"}
           className="w-full rounded border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-stone-900"
         />
+        {mode === "register" && (
+          <input
+            value={confirmPassword}
+            onChange={(e) => { setConfirmPassword(e.target.value); setError(""); }}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            type="password"
+            placeholder="Şifre (tekrar)"
+            autoComplete="new-password"
+            className="w-full rounded border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-stone-900"
+          />
+        )}
+        {mode === "login" && (
+          <button onClick={() => { setMode("forgot"); setError(""); }} className="text-xs text-stone-500 hover:text-stone-900">
+            Şifremi unuttum
+          </button>
+        )}
         {error && <p className="text-xs text-red-600">{error}</p>}
         <button onClick={submit} disabled={busy} className="w-full rounded-full bg-stone-900 py-2.5 text-sm font-medium text-stone-50 hover:bg-stone-700 disabled:opacity-50">
           {busy ? "Gönderiliyor…" : mode === "login" ? "Giriş yap" : "Hesap oluştur"}
