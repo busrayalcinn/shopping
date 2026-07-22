@@ -1,222 +1,178 @@
-// Veritabanı katmanı: better-sqlite3 (senkron, hızlı, tek dosya).
-// İlk açılışta şemayı kurar ve ürünleri yükler. Dosya: data/store.db
-import Database from "better-sqlite3";
-import path from "path";
-import fs from "fs";
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-const DB_PATH = path.join(process.cwd(), "data", "store.db");
+// Next.js dev modunda her reload'da yeni bağlantı açılmasın diye global cache
+const globalForPrisma = globalThis;
 
-function createDb() {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL"); // eşzamanlı okuma/yazmada güvenli ve hızlı
-  db.pragma("foreign_keys = ON");
+export const prisma =
+  globalForPrisma.prisma || new PrismaClient();
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id            TEXT PRIMARY KEY,
-      email         TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      name          TEXT NOT NULL,
-      created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS password_resets (
-      token      TEXT PRIMARY KEY,
-      user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      expires_at TEXT NOT NULL,
-      used       INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS products (
-      id     INTEGER PRIMARY KEY,
-      name   TEXT NOT NULL,
-      price  INTEGER NOT NULL CHECK (price >= 0),
-      cat    TEXT NOT NULL,
-      swatch TEXT NOT NULL,
-      text   TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS orders (
-      id         TEXT PRIMARY KEY,
-      user_id    TEXT NOT NULL REFERENCES users(id),
-      name       TEXT NOT NULL,
-      address    TEXT NOT NULL,
-      total      INTEGER NOT NULL,
-      status     TEXT NOT NULL DEFAULT 'received',
-      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS order_items (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id   TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      product_id INTEGER NOT NULL REFERENCES products(id),
-      name       TEXT NOT NULL,   -- sipariş anındaki ürün adı
-      price      INTEGER NOT NULL, -- sipariş anındaki birim fiyat
-      size       TEXT NOT NULL,
-      qty        INTEGER NOT NULL CHECK (qty > 0),
-      line_total INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_items_order ON order_items(order_id);
-  `);
-
-  // Mevcut kurulumlarda orders tablosuna ödeme kolonlarını ekle (idempotent migration).
-  const orderCols = db.prepare("PRAGMA table_info(orders)").all().map((c) => c.name);
-  if (!orderCols.includes("payment_status")) {
-    db.exec("ALTER TABLE orders ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'pending'");
-  }
-  if (!orderCols.includes("stripe_session_id")) {
-    db.exec("ALTER TABLE orders ADD COLUMN stripe_session_id TEXT");
-    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_stripe_session ON orders(stripe_session_id)");
-  }
-
-  // Ürünler boşsa başlangıç verisini yükle
-  const count = db.prepare("SELECT COUNT(*) AS c FROM products").get().c;
-  if (count === 0) {
-    const seed = db.prepare(
-      "INSERT INTO products (id, name, price, cat, swatch, text) VALUES (?, ?, ?, ?, ?, ?)"
-    );
-    const PRODUCTS = [
-      [1, "Oversize Keten Gömlek", 540, "Üst Giyim", "bg-stone-300", "text-stone-800"],
-      [2, "Yüksek Bel Pantolon", 720, "Alt Giyim", "bg-stone-800", "text-stone-100"],
-      [3, "Yün Karışımlı Kazak", 890, "Üst Giyim", "bg-amber-200", "text-stone-800"],
-      [4, "Pamuklu Basic Tişört", 260, "Üst Giyim", "bg-stone-100", "text-stone-800"],
-      [5, "Geniş Paça Jean", 980, "Alt Giyim", "bg-indigo-300", "text-stone-900"],
-      [6, "Uzun Trençkot", 1850, "Dış Giyim", "bg-stone-400", "text-stone-900"],
-      [7, "Triko Hırka", 650, "Üst Giyim", "bg-rose-200", "text-stone-800"],
-      [8, "Pileli Midi Etek", 580, "Alt Giyim", "bg-emerald-200", "text-stone-800"],
-    ];
-    db.transaction(() => PRODUCTS.forEach((p) => seed.run(...p)))();
-  }
-
-  return db;
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
 }
 
-// Dev'de hot-reload yeni bağlantı açmasın diye global'de tekil tutulur.
-const g = globalThis;
-export const db = g.__atolyeDb ?? createDb();
-if (process.env.NODE_ENV !== "production") g.__atolyeDb = db;
+// =========================
+// USER
+// =========================
 
-export const newId = (prefix) => `${prefix}_${crypto.randomBytes(8).toString("hex")}`;
+export async function getUserByEmail(email) {
+  return prisma.user.findUnique({
+    where: { email: email.toLowerCase() },
+  });
+}
 
-// ---- Sorgular ----
+export async function createUser({ email, password, name }) {
+  const passwordHash = await bcrypt.hash(password, 12);
 
-export const getProducts = () =>
-  db.prepare("SELECT * FROM products ORDER BY id").all();
+  return prisma.user.create({
+    data: {
+      email: email.toLowerCase(),
+      name: name || null,
+      passwordHash,
+    },
+  });
+}
 
-export const getProductsByIds = (ids) => {
-  if (ids.length === 0) return [];
-  const marks = ids.map(() => "?").join(",");
-  return db.prepare(`SELECT * FROM products WHERE id IN (${marks})`).all(...ids);
-};
+export async function verifyUser(email, password) {
+  const user = await getUserByEmail(email);
 
-export const getUserByEmail = (email) =>
-  db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  if (!user) return null;
 
-export const getUserById = (id) =>
-  db.prepare("SELECT id, email, name FROM users WHERE id = ?").get(id);
+  const ok = await bcrypt.compare(password, user.passwordHash);
 
-export const createUser = ({ email, passwordHash, name }) => {
-  const id = newId("usr");
-  db.prepare("INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)")
-    .run(id, email, passwordHash, name);
-  return { id, email, name };
-};
+  if (!ok) return null;
 
-export const updateUserPassword = (userId, passwordHash) =>
-  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+  return user;
+}
 
-// ---- Şifre sıfırlama ----
-// Token 30 dakika geçerli, tek kullanımlık. E-posta gönderimi kurulu değilse
-// (bkz. /api/auth/forgot-password) bağlantı sunucu konsoluna yazılır — demo amaçlı.
-const RESET_TTL_MS = 30 * 60 * 1000;
+// =========================
+// PASSWORD RESET
+// =========================
 
-export const createPasswordReset = (userId) => {
+export async function createPasswordReset(userId) {
   const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
-  db.prepare("INSERT INTO password_resets (token, user_id, expires_at) VALUES (?, ?, ?)")
-    .run(token, userId, expiresAt);
+
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 30); // 30 dk
+
+  await prisma.passwordReset.create({
+    data: {
+      token,
+      userId,
+      expiresAt,
+    },
+  });
+
   return token;
-};
+}
 
-// Süresi geçmemiş, henüz kullanılmamış token'a karşılık gelen kullanıcıyı döner.
-export const getValidPasswordReset = (token) => {
-  const row = db
-    .prepare(
-      `SELECT pr.user_id AS userId, pr.expires_at AS expiresAt, pr.used, u.email
-       FROM password_resets pr JOIN users u ON u.id = pr.user_id
-       WHERE pr.token = ?`
-    )
-    .get(token);
-  if (!row || row.used || new Date(row.expiresAt).getTime() < Date.now()) return null;
-  return row;
-};
+export async function getValidPasswordReset(token) {
+  return prisma.passwordReset.findFirst({
+    where: {
+      token,
+      used: false,
+      expiresAt: {
+        gt: new Date(),
+      },
+    },
+  });
+}
 
-export const consumePasswordReset = (token) =>
-  db.prepare("UPDATE password_resets SET used = 1 WHERE token = ?").run(token);
+export async function consumePasswordReset(token) {
+  return prisma.passwordReset.update({
+    where: { token },
+    data: { used: true },
+  });
+}
 
-// Sipariş + kalemleri tek transaction'da yazar: ya hepsi ya hiçbiri.
-export const createOrder = db.transaction(({ userId, name, address, total, lines }) => {
-  const id = newId("ord");
-  db.prepare("INSERT INTO orders (id, user_id, name, address, total) VALUES (?, ?, ?, ?, ?)")
-    .run(id, userId, name, address, total);
-  const insertItem = db.prepare(
-    "INSERT INTO order_items (order_id, product_id, name, price, size, qty, line_total) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  );
-  for (const l of lines) {
-    insertItem.run(id, l.productId, l.name, l.price, l.size, l.qty, l.lineTotal);
-  }
-  return { id, total };
-});
+export async function updateUserPassword(userId, passwordHash) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
+}
 
-export const getOrdersForUser = (userId) => {
-  const orders = db
-    .prepare(
-      "SELECT id, name, address, total, status, payment_status AS paymentStatus, created_at AS createdAt FROM orders WHERE user_id = ? ORDER BY created_at DESC"
-    )
-    .all(userId);
-  const items = db.prepare(
-    "SELECT name, size, qty, price, line_total AS lineTotal FROM order_items WHERE order_id = ?"
-  );
-  return orders.map((o) => ({ ...o, items: items.all(o.id) }));
-};
+// =========================
+// ORDER
+// =========================
 
-// Sipariş oluşturulduktan sonra Stripe Checkout Session'ını siparişe bağlar.
-export const attachStripeSession = (orderId, stripeSessionId) =>
-  db.prepare("UPDATE orders SET stripe_session_id = ? WHERE id = ?").run(stripeSessionId, orderId);
+export async function createOrder({ userId, total }) {
+  return prisma.order.create({
+    data: {
+      userId,
+      total,
+      status: "pending",
+    },
+  });
+}
 
-// Webhook (ya da success sayfasındaki doğrulama) ödemeyi onaylayınca çağrılır.
-// İdempotent: aynı session için tekrar çağrılsa da sorun çıkarmaz.
-export const markOrderPaidBySession = (stripeSessionId) => {
-  db.prepare("UPDATE orders SET payment_status = 'paid' WHERE stripe_session_id = ? AND payment_status != 'paid'")
-    .run(stripeSessionId);
-  return db
-    .prepare(
-      "SELECT id, user_id AS userId, name, address, total, status, payment_status AS paymentStatus FROM orders WHERE stripe_session_id = ?"
-    )
-    .get(stripeSessionId);
-};
+const PRODUCTS = [
+  {
+    id: 1,
+    name: "Oversize Keten Gömlek",
+    price: 540,
+    cat: "Üst Giyim",
+    swatch: "bg-stone-300",
+    text: "text-stone-800",
+  },
+  {
+    id: 2,
+    name: "Yüksek Bel Pantolon",
+    price: 720,
+    cat: "Alt Giyim",
+    swatch: "bg-stone-800",
+    text: "text-stone-100",
+  },
+  {
+    id: 3,
+    name: "Yün Karışımlı Kazak",
+    price: 890,
+    cat: "Üst Giyim",
+    swatch: "bg-amber-200",
+    text: "text-stone-800",
+  },
+  {
+    id: 4,
+    name: "Pamuklu Basic Tişört",
+    price: 260,
+    cat: "Üst Giyim",
+    swatch: "bg-stone-100",
+    text: "text-stone-800",
+  },
+  {
+    id: 5,
+    name: "Geniş Paça Jean",
+    price: 980,
+    cat: "Alt Giyim",
+    swatch: "bg-indigo-300",
+    text: "text-stone-900",
+  },
+  {
+    id: 6,
+    name: "Uzun Trençkot",
+    price: 1850,
+    cat: "Dış Giyim",
+    swatch: "bg-stone-400",
+    text: "text-stone-900",
+  },
+  {
+    id: 7,
+    name: "Triko Hırka",
+    price: 650,
+    cat: "Üst Giyim",
+    swatch: "bg-rose-200",
+    text: "text-stone-800",
+  },
+  {
+    id: 8,
+    name: "Pileli Midi Etek",
+    price: 580,
+    cat: "Alt Giyim",
+    swatch: "bg-emerald-200",
+    text: "text-stone-800",
+  },
+];
 
-export const getOrderWithItems = (orderId, userId) => {
-  const order = db
-    .prepare(
-      "SELECT id, name, address, total, status, payment_status AS paymentStatus, created_at AS createdAt FROM orders WHERE id = ? AND user_id = ?"
-    )
-    .get(orderId, userId);
-  if (!order) return null;
-  const items = db
-    .prepare("SELECT name, size, qty, price, line_total AS lineTotal FROM order_items WHERE order_id = ?")
-    .all(orderId);
-  return { ...order, items };
-};
-
-export const getOrderByStripeSession = (stripeSessionId, userId) =>
-  db
-    .prepare(
-      "SELECT id, name, address, total, status, payment_status AS paymentStatus, created_at AS createdAt FROM orders WHERE stripe_session_id = ? AND user_id = ?"
-    )
-    .get(stripeSessionId, userId);
+export function getProducts() {
+  return PRODUCTS;
+}

@@ -468,7 +468,14 @@ function AuthForm({ current, onAuth, onLogout }) {
           {busy ? "Gönderiliyor…" : mode === "login" ? "Giriş yap" : "Hesap oluştur"}
         </button>
       </div>
-      <button onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} className="mt-4 w-full text-center text-xs text-stone-500 hover:text-stone-900">
+      <button onClick={() => { setMode(mode === "login" ? "register" : "login");
+        setEmail("");
+        setPassword("");
+        setConfirmPassword("");
+        setName("");
+        setError("");
+        }
+} className="mt-4 w-full text-center text-xs text-stone-500 hover:text-stone-900">
         {mode === "login" ? "Hesabın yok mu? Kayıt ol" : "Zaten üye misin? Giriş yap"}
       </button>
     </div>
