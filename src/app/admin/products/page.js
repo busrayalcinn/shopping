@@ -16,6 +16,7 @@ const SWATCHES = [
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -23,6 +24,7 @@ export default function ProductsPage() {
     category: "Üst Giyim",
     swatch: "bg-stone-300",
     textColor: "text-stone-800",
+    imageUrl: "",
   });
 
   async function loadProducts() {
@@ -56,6 +58,7 @@ export default function ProductsPage() {
       category: "Üst Giyim",
       swatch: "bg-stone-300",
       textColor: "text-stone-800",
+      imageUrl: "", 
     });
 
     loadProducts();
@@ -68,6 +71,22 @@ export default function ProductsPage() {
       method: "DELETE",
     });
 
+    loadProducts();
+  }
+
+  async function updateProduct(product) {
+    const res = await fetch(`/api/admin/products/${product.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(product),
+    });
+
+    if (!res.ok) {
+      alert("Ürün güncellenemedi");
+      return;
+    }
+
+    setEditingId(null);
     loadProducts();
   }
 
@@ -114,6 +133,13 @@ export default function ProductsPage() {
               required
             />
 
+            <input
+              placeholder="Fotoğraf URL"
+              value={form.imageUrl}
+              onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+              className="w-full border rounded px-3 py-2"
+            />
+
             <select
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -146,10 +172,11 @@ export default function ProductsPage() {
         </form>
 
         <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
-          <div className="grid grid-cols-5 gap-4 border-b border-stone-200 bg-stone-50 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
+          <div className="grid grid-cols-6 gap-4 border-b border-stone-200 bg-stone-50 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
             <div>Ürün</div>
             <div>Kategori</div>
             <div>Fiyat</div>
+            <div>Fotoğraf</div>
             <div>Renk</div>
             <div>İşlem</div>
           </div>
@@ -161,17 +188,98 @@ export default function ProductsPage() {
               {products.map((p) => (
                 <div
                   key={p.id}
-                  className="grid grid-cols-5 items-center gap-4 px-6 py-4"
+                  className="grid grid-cols-6 items-center gap-4 px-6 py-4"
                 >
-                  <div className="font-medium">{p.name}</div>
-                  <div className="text-sm text-stone-500">{p.category}</div>
-                  <div className="font-semibold">
-                    {p.price.toLocaleString("tr-TR")} ₺
-                  </div>
-                  <div>
-                    <div className={`h-6 w-6 rounded-full ${p.swatch}`} />
-                  </div>
-                  <div>
+                  {/* Ürün adı */}
+                  <input
+                    value={p.name}
+                    onChange={(e) =>
+                      setProducts((prev) =>
+                        prev.map((x) =>
+                          x.id === p.id ? { ...x, name: e.target.value } : x
+                        )
+                      )
+                    }
+                    className="rounded border border-stone-300 px-3 py-2 text-sm"
+                  />
+
+                  {/* Kategori */}
+                  <select
+                    value={p.category}
+                    onChange={(e) =>
+                      setProducts((prev) =>
+                        prev.map((x) =>
+                          x.id === p.id ? { ...x, category: e.target.value } : x
+                        )
+                      )
+                    }
+                    className="rounded border border-stone-300 px-3 py-2 text-sm"
+                  >
+                    <option>Üst Giyim</option>
+                    <option>Alt Giyim</option>
+                    <option>Dış Giyim</option>
+                  </select>
+
+                  {/* Fiyat */}
+                  <input
+                    type="number"
+                    value={p.price}
+                    onChange={(e) =>
+                      setProducts((prev) =>
+                        prev.map((x) =>
+                          x.id === p.id
+                            ? { ...x, price: Number(e.target.value) }
+                            : x
+                        )
+                      )
+                    }
+                    className="rounded border border-stone-300 px-3 py-2 text-sm"
+                  />
+
+                  {/* Fotoğraf yolu */}
+                  <input
+                    value={p.imageUrl || ""}
+                    onChange={(e) =>
+                      setProducts((prev) =>
+                        prev.map((x) =>
+                          x.id === p.id
+                            ? { ...x, imageUrl: e.target.value }
+                            : x
+                        )
+                      )
+                    }
+                    placeholder="/products/blazer-ceket.png"
+                    className="rounded border border-stone-300 px-3 py-2 text-sm"
+                  />
+
+                  {/* Renk */}
+                  <select
+                    value={p.swatch}
+                    onChange={(e) =>
+                      setProducts((prev) =>
+                        prev.map((x) =>
+                          x.id === p.id ? { ...x, swatch: e.target.value } : x
+                        )
+                      )
+                    }
+                    className="rounded border border-stone-300 px-3 py-2 text-sm"
+                  >
+                    {SWATCHES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Butonlar */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateProduct(p)}
+                      className="rounded-full bg-stone-900 px-3 py-1 text-xs text-white hover:bg-stone-700"
+                    >
+                      Kaydet
+                    </button>
+
                     <button
                       onClick={() => deleteProduct(p.id)}
                       className="rounded-full border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50"

@@ -40,6 +40,7 @@ export async function POST(req) {
       category: body.category,
       swatch: body.swatch,
       textColor: body.textColor,
+      imageUrl: body.imageUrl, 
     },
   });
 

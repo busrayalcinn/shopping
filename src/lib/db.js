@@ -118,5 +118,6 @@ export async function getProducts() {
     cat: p.category,
     swatch: p.swatch,
     text: p.textColor,
+    imageUrl: p.imageUrl,
   }));
 }

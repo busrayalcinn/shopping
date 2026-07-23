@@ -47,5 +47,6 @@ model Product {
   category  String
   swatch    String
   textColor String
+  imageUrl  String?
   createdAt DateTime @default(now())
 }

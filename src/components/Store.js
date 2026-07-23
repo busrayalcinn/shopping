@@ -187,12 +187,27 @@ export default function Store({ products, initialUser = null }) {
           <div className="grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-3 lg:grid-cols-4">
             {list.map((p) => (
               <div key={p.id} className="group">
-                <button onClick={() => setPicker(p)} className={`relative flex aspect-[3/4] w-full items-end overflow-hidden ${p.swatch}`}>
-                  <span className={`p-4 text-left text-xs uppercase tracking-widest ${p.text} opacity-60`}>{p.cat}</span>
-                  <span className="absolute inset-0 flex items-center justify-center bg-stone-900/0 text-sm font-medium uppercase tracking-widest text-stone-50 opacity-0 transition group-hover:bg-stone-900/30 group-hover:opacity-100">
-                    Sepete ekle
-                  </span>
-                </button>
+              <button
+                onClick={() => setPicker(p)}
+                className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-stone-100"
+              >
+                <img
+                
+                  src={p.imageUrl || "/placeholder.jpg"}
+                  alt={p.name}
+                  className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                />
+
+                <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/20" />
+
+                <span className="absolute bottom-4 left-4 text-xs uppercase tracking-widest text-white/90">
+                  {p.cat}
+                </span>
+
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-medium uppercase tracking-widest text-white opacity-0 transition group-hover:opacity-100">
+                  Sepete ekle
+                </span>
+              </button>
                 <div className="mt-3 flex items-baseline justify-between gap-2">
                   <h3 className="text-sm leading-snug">{p.name}</h3>
                   <span className="shrink-0 text-sm font-medium">{fmt(p.price)}</span>
