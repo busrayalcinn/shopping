@@ -39,3 +39,13 @@ model Order {
 
   user User @relation(fields: [userId], references: [id])
 }
+
+model Product {
+  id        Int      @id @default(autoincrement())
+  name      String
+  price     Int
+  category  String
+  swatch    String
+  textColor String
+  createdAt DateTime @default(now())
+}

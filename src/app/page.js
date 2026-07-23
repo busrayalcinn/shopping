@@ -6,7 +6,7 @@ import Store from "@/components/Store";
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const products = getProducts();
+  const products = await getProducts();
   const user = await getSessionUser();
   return <Store products={products} initialUser={user ? { email: user.email, name: user.name } : null} />;
 }

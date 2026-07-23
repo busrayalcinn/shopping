@@ -106,73 +106,17 @@ export async function createOrder({ userId, total }) {
   });
 }
 
-const PRODUCTS = [
-  {
-    id: 1,
-    name: "Oversize Keten Gömlek",
-    price: 540,
-    cat: "Üst Giyim",
-    swatch: "bg-stone-300",
-    text: "text-stone-800",
-  },
-  {
-    id: 2,
-    name: "Yüksek Bel Pantolon",
-    price: 720,
-    cat: "Alt Giyim",
-    swatch: "bg-stone-800",
-    text: "text-stone-100",
-  },
-  {
-    id: 3,
-    name: "Yün Karışımlı Kazak",
-    price: 890,
-    cat: "Üst Giyim",
-    swatch: "bg-amber-200",
-    text: "text-stone-800",
-  },
-  {
-    id: 4,
-    name: "Pamuklu Basic Tişört",
-    price: 260,
-    cat: "Üst Giyim",
-    swatch: "bg-stone-100",
-    text: "text-stone-800",
-  },
-  {
-    id: 5,
-    name: "Geniş Paça Jean",
-    price: 980,
-    cat: "Alt Giyim",
-    swatch: "bg-indigo-300",
-    text: "text-stone-900",
-  },
-  {
-    id: 6,
-    name: "Uzun Trençkot",
-    price: 1850,
-    cat: "Dış Giyim",
-    swatch: "bg-stone-400",
-    text: "text-stone-900",
-  },
-  {
-    id: 7,
-    name: "Triko Hırka",
-    price: 650,
-    cat: "Üst Giyim",
-    swatch: "bg-rose-200",
-    text: "text-stone-800",
-  },
-  {
-    id: 8,
-    name: "Pileli Midi Etek",
-    price: 580,
-    cat: "Alt Giyim",
-    swatch: "bg-emerald-200",
-    text: "text-stone-800",
-  },
-];
+export async function getProducts() {
+  const products = await prisma.product.findMany({
+    orderBy: { id: "asc" },
+  });
 
-export function getProducts() {
-  return PRODUCTS;
+  return products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    cat: p.category,
+    swatch: p.swatch,
+    text: p.textColor,
+  }));
 }
