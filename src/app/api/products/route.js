@@ -4,7 +4,9 @@ import { getProducts } from "@/lib/db";
 // Ürünler veritabanından her istekte okunur (build'de dondurulmaz).
 export const dynamic = "force-dynamic";
 
-// GET /api/products -> tüm ürünler (veritabanından)
+// GET /api/products -> tüm ürünler (PostgreSQL'den)
 export async function GET() {
-  return NextResponse.json(getProducts());
+  const products = await getProducts();
+
+  return NextResponse.json(products);
 }
