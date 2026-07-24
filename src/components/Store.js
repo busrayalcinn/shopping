@@ -50,7 +50,7 @@ export default function Store({ products, initialUser = null }) {
         return c.map((i) =>
           `${i.id}-${i.size}` === key ? { ...i, qty: Math.min(MAX_QTY, i.qty + 1) } : i
         );
-      return [...c, { id: p.id, name: p.name, price: p.price, size, qty: 1 }];
+      return [...c, { id: p.id, name: p.name, price: p.price, imageUrl: p.imageUrl, size, qty: 1 }];
     });
     setPicker(null);
     setCartOpen(true);
@@ -102,6 +102,17 @@ export default function Store({ products, initialUser = null }) {
   };
 
   const closeCart = () => { setCartOpen(false); setCheckout("cart"); };
+  const [openedFromCart, setOpenedFromCart] = useState(false);
+
+  function openProductFromCart(item) {
+    const product = products.find((p) => p.id === item.id);
+
+    if (!product) return;
+
+    setOpenedFromCart(true);
+    setCartOpen(false);
+    setPreview(product);
+  }
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 font-sans">
@@ -220,17 +231,26 @@ export default function Store({ products, initialUser = null }) {
       </main>
 
       {preview && (
-        <Modal onClose={() => setPreview(null)}>
-          <div className="max-w-md">
+        <Modal
+          onClose={() => {
+            setPreview(null);
+
+            if (openedFromCart) {
+              setOpenedFromCart(false);
+              setCartOpen(true);
+            }
+          }}
+        >
+          <div className="max-w-md pl-6 pt-24">
             <div className="overflow-hidden rounded-2xl bg-stone-100">
               <img
                 src={preview.imageUrl}
                 alt={preview.name}
-                className="h-[560px] w-full object-cover"
+                className=" h-[560px] w-full object-cover"
               />
             </div>
 
-            <div className="mt-5">
+            <div className="mt-5 pb-8">
               <p className="text-xs uppercase tracking-[0.25em] text-stone-400">
                 {preview.cat}
               </p>
@@ -251,19 +271,29 @@ export default function Store({ products, initialUser = null }) {
               <button
                 onClick={() => {
                   setPreview(null);
+                  setOpenedFromCart(false);
                   setPicker(preview);
                 }}
                 className="mt-6 w-full rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 hover:bg-stone-700"
               >
                 Beden Seç ve Sepete Ekle
-              </button>
+              </button><br></br>
             </div>
           </div>
         </Modal>
       )}
 
       {picker && (
-        <Modal onClose={() => setPicker(null)}>
+        <Modal
+          onClose={() => {
+            setPicker(null);
+
+            if (openedFromCart) {
+              setOpenedFromCart(false);
+              setCartOpen(true);
+            }
+          }}
+        >
           <h3 className="text-lg font-medium">{picker.name}</h3>
           <p className="mt-1 text-sm text-stone-500">{fmt(picker.price)} · Beden seç</p>
           <div className="mt-5 grid grid-cols-5 gap-2">
@@ -304,8 +334,17 @@ export default function Store({ products, initialUser = null }) {
                 {cart.map((i) => {
                   const key = `${i.id}-${i.size}`;
                   return (
-                    <div key={key} className="flex gap-3">
-                      <div className="h-20 w-16 shrink-0 bg-stone-200" />
+                    <div
+                      key={key}
+                      onClick={() => openProductFromCart(i)}
+                      className="flex gap-3 cursor-pointer rounded-xl p-2 transition hover:bg-stone-100"
+                    >
+                      <img
+                        src={i.imageUrl || "/placeholder.jpg"}
+                        alt={i.name}
+                        className="h-20 w-16 shrink-0 rounded-xl border border-stone-200 object-cover shadow-sm"
+                      />
+
                       <div className="flex flex-1 flex-col justify-between">
                         <div className="flex justify-between gap-2">
                           <div>
@@ -314,10 +353,32 @@ export default function Store({ products, initialUser = null }) {
                           </div>
                           <span className="text-sm">{fmt(i.price * i.qty)}</span>
                         </div>
+
                         <div className="flex items-center gap-2">
-                          <button aria-label="Azalt" onClick={() => setQty(key, -1)} className="rounded border border-stone-300 p-1 hover:bg-stone-100"><Minus size={14} /></button>
+                          <button
+                            aria-label="Azalt"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setQty(key, -1);
+                            }}
+                            className="rounded border border-stone-300 p-1 hover:bg-stone-100"
+                          >
+                            <Minus size={14} />
+                          </button>
+
                           <span className="w-6 text-center text-sm">{i.qty}</span>
-                          <button aria-label="Artır" onClick={() => setQty(key, 1)} disabled={i.qty >= MAX_QTY} className="rounded border border-stone-300 p-1 hover:bg-stone-100 disabled:opacity-40"><Plus size={14} /></button>
+
+                          <button
+                            aria-label="Artır"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setQty(key, 1);
+                            }}
+                            disabled={i.qty >= MAX_QTY}
+                            className="rounded border border-stone-300 p-1 hover:bg-stone-100 disabled:opacity-40"
+                          >
+                            <Plus size={14} />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -343,28 +404,76 @@ export default function Store({ products, initialUser = null }) {
 
 function Modal({ children, onClose }) {
   useEscape(onClose);
+
+  const [scrolled, setScrolled] = useState(false);
+  const bodyRef = useRef(null);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      console.log(bodyRef.current.scrollTop);
+      setScrolled(el.scrollTop > 5);
+    };
+
+    el.addEventListener("scroll", handleScroll);
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-stone-900/40" onClick={onClose} />
-        <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl bg-stone-50 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="absolute inset-0 bg-stone-900/40"
+        onClick={onClose}
+      />
 
-          {/* Sticky header */}
-          <div className="sticky top-0 z-10 flex justify-end border-b border-stone-200 bg-stone-50/95 px-4 py-3 backdrop-blur">
-            <button
-              aria-label="Kapat"
-              onClick={onClose}
-              className="rounded-full p-2 text-stone-500 transition hover:bg-stone-200 hover:text-stone-900"
-            >
-              <X size={20} />
-            </button>
-          </div>
+<div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl shadow-2xl">
+  {/* Header artık akışın dışında, her zaman üstte sabit bir katman */}
+  <div
+    className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4 transition-all duration-300"
+style={{
+  background: scrolled
+    ? "rgba(0,0,0,.55)"
+    : "rgba(0,0,0,.95)",
 
-          {/* Scroll alanı */}
-          <div className="max-h-[calc(90vh-64px)] overflow-y-auto p-6">
-            {children}
-          </div>
+  backdropFilter: scrolled
+    ? "blur(24px) saturate(180%)"
+    : "blur(10px)",
 
-        </div>
+  WebkitBackdropFilter: scrolled
+    ? "blur(24px) saturate(180%)"
+    : "blur(10px)",
+
+  borderBottom: scrolled
+    ? "1px solid rgba(255,255,255,.08)"
+    : "1px solid rgba(255,255,255,.06)",
+
+  boxShadow: scrolled
+    ? "0 8px 24px rgba(0,0,0,.30)"
+    : "0 8px 32px rgba(0,0,0,.45)",
+}}
+  >
+    <span className="text-xl font-semibold uppercase tracking-[0.35em] text-white">
+      Atölye
+    </span>
+    <button
+      onClick={onClose}
+      className="rounded-full p-2 text-white transition duration-300 hover:bg-white/10"
+    >
+      <X size={20} />
+    </button>
+  </div>
+
+  {/* Scroll edilen içerik, header'ın "altından" geçer */}
+  <div ref={bodyRef} className="max-h-[90vh] overflow-y-auto bg-stone-50">
+    {children}
+  </div>
+</div>
     </div>
   );
 }
