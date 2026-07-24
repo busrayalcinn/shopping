@@ -25,6 +25,7 @@ export default function Store({ products, initialUser = null }) {
   const [authOpen, setAuthOpen] = useState(false);
   const [checkout, setCheckout] = useState("cart"); // cart | pay
   const [picker, setPicker] = useState(null);
+  const [preview, setPreview] = useState(null);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -188,7 +189,7 @@ export default function Store({ products, initialUser = null }) {
             {list.map((p) => (
               <div key={p.id} className="group">
               <button
-                onClick={() => setPicker(p)}
+                onClick={() => setPreview(p)}
                 className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-stone-100"
               >
                 <img
@@ -217,6 +218,49 @@ export default function Store({ products, initialUser = null }) {
           </div>
         )}
       </main>
+
+      {preview && (
+        <Modal onClose={() => setPreview(null)}>
+          <div className="max-w-md">
+            <div className="overflow-hidden rounded-2xl bg-stone-100">
+              <img
+                src={preview.imageUrl}
+                alt={preview.name}
+                className="h-[560px] w-full object-cover"
+              />
+            </div>
+
+            <div className="mt-5">
+              <p className="text-xs uppercase tracking-[0.25em] text-stone-400">
+                {preview.cat}
+              </p>
+
+              <h3 className="mt-2 text-2xl font-semibold">
+                {preview.name}
+              </h3>
+
+              <p className="mt-2 text-xl font-medium">
+                {fmt(preview.price)}
+              </p>
+
+              <p className="mt-4 text-sm leading-6 text-stone-600">
+                Zarif duruşu, seçkin kumaş kalitesi ve özgün tasarımıyla stilinize
+                benzersiz bir imza katacak özel bir koleksiyon parçası.
+              </p>
+
+              <button
+                onClick={() => {
+                  setPreview(null);
+                  setPicker(preview);
+                }}
+                className="mt-6 w-full rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 hover:bg-stone-700"
+              >
+                Beden Seç ve Sepete Ekle
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {picker && (
         <Modal onClose={() => setPicker(null)}>
@@ -302,10 +346,25 @@ function Modal({ children, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-stone-900/40" onClick={onClose} />
-      <div className="relative w-full max-w-sm rounded-lg bg-stone-50 p-6 shadow-xl">
-        <button aria-label="Kapat" onClick={onClose} className="absolute right-4 top-4 text-stone-400 hover:text-stone-900"><X size={18} /></button>
-        {children}
-      </div>
+        <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl bg-stone-50 shadow-2xl">
+
+          {/* Sticky header */}
+          <div className="sticky top-0 z-10 flex justify-end border-b border-stone-200 bg-stone-50/95 px-4 py-3 backdrop-blur">
+            <button
+              aria-label="Kapat"
+              onClick={onClose}
+              className="rounded-full p-2 text-stone-500 transition hover:bg-stone-200 hover:text-stone-900"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Scroll alanı */}
+          <div className="max-h-[calc(90vh-64px)] overflow-y-auto p-6">
+            {children}
+          </div>
+
+        </div>
     </div>
   );
 }
