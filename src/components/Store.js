@@ -287,21 +287,43 @@ export default function Store({ products, initialUser = null }) {
         <Modal
           onClose={() => {
             setPicker(null);
-
             if (openedFromCart) {
               setOpenedFromCart(false);
               setCartOpen(true);
             }
           }}
         >
-          <h3 className="text-lg font-medium">{picker.name}</h3>
-          <p className="mt-1 text-sm text-stone-500">{fmt(picker.price)} · Beden seç</p>
-          <div className="mt-5 grid grid-cols-5 gap-2">
-            {SIZES.map((s) => (
-              <button key={s} onClick={() => addToCart(picker, s)} className="rounded border border-stone-300 py-3 text-sm font-medium hover:border-stone-900 hover:bg-stone-900 hover:text-stone-50">
-                {s}
-              </button>
-            ))}
+          <div className="flex gap-5 px-6 pt-24 pb-8">
+            <img
+              src={picker.imageUrl || "/placeholder.jpg"}
+              alt={picker.name}
+              className="h-32 w-24 shrink-0 rounded-xl object-cover shadow-sm"
+            />
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.25em] text-stone-400">
+                {picker.cat}
+              </p>
+              <h3 className="mt-1 text-lg font-semibold leading-snug">{picker.name}</h3>
+              <p className="mt-1 text-sm text-stone-500">{fmt(picker.price)}</p>
+            </div>
+          </div>
+
+          <div className="px-6 pb-8">
+            <p className="mb-3 text-xs uppercase tracking-widest text-stone-400">Beden Seç</p>
+            <div className="grid grid-cols-5 gap-2">
+              {SIZES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => addToCart(picker, s)}
+                  className="rounded-xl border border-stone-200 py-3.5 text-sm font-medium text-stone-700 transition hover:border-stone-900 hover:bg-stone-900 hover:text-stone-50 active:scale-95"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <p className="mt-4 text-center text-xs text-stone-400">
+              Bir beden seçtiğinizde ürün sepete eklenecektir.
+            </p>
           </div>
         </Modal>
       )}
@@ -434,40 +456,40 @@ function Modal({ children, onClose }) {
 
 <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-3xl shadow-2xl">
   {/* Header artık akışın dışında, her zaman üstte sabit bir katman */}
-  <div
-    className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4 transition-all duration-300"
-style={{
-  background: scrolled
-    ? "rgba(0,0,0,.55)"
-    : "rgba(0,0,0,.95)",
+<div
+  className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4 transition-all duration-300"
+  style={{
+    background: scrolled
+      ? "linear-gradient(to top, rgba(28,25,23,.72), rgba(12,10,9,.82))"
+      : "linear-gradient(to top, rgba(35,31,28,.97) 0%, rgba(12,10,9,.98) 100%)",
 
-  backdropFilter: scrolled
-    ? "blur(24px) saturate(180%)"
-    : "blur(10px)",
+    backdropFilter: scrolled
+      ? "blur(24px) saturate(180%)"
+      : "blur(14px) saturate(140%)",
 
-  WebkitBackdropFilter: scrolled
-    ? "blur(24px) saturate(180%)"
-    : "blur(10px)",
+    WebkitBackdropFilter: scrolled
+      ? "blur(24px) saturate(180%)"
+      : "blur(14px) saturate(140%)",
 
-  borderBottom: scrolled
-    ? "1px solid rgba(255,255,255,.08)"
-    : "1px solid rgba(255,255,255,.06)",
+    borderBottom: scrolled
+      ? "1px solid rgba(255,255,255,.08)"
+      : "1px solid rgba(214,197,175,.14)",
 
-  boxShadow: scrolled
-    ? "0 8px 24px rgba(0,0,0,.30)"
-    : "0 8px 32px rgba(0,0,0,.45)",
-}}
+    boxShadow: scrolled
+      ? "0 8px 24px rgba(0,0,0,.30)"
+      : "0 1px 0 rgba(255,255,255,.05) inset, 0 8px 32px rgba(0,0,0,.45)",
+  }}
+>
+  <span className="text-xl font-semibold uppercase tracking-[0.35em] text-white">
+    Atölye
+  </span>
+  <button
+    onClick={onClose}
+    className="rounded-full p-2 text-white transition duration-300 hover:bg-white/10"
   >
-    <span className="text-xl font-semibold uppercase tracking-[0.35em] text-white">
-      Atölye
-    </span>
-    <button
-      onClick={onClose}
-      className="rounded-full p-2 text-white transition duration-300 hover:bg-white/10"
-    >
-      <X size={20} />
-    </button>
-  </div>
+    <X size={20} />
+  </button>
+</div>
 
   {/* Scroll edilen içerik, header'ın "altından" geçer */}
   <div ref={bodyRef} className="max-h-[90vh] overflow-y-auto bg-stone-50">
