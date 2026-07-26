@@ -121,3 +121,11 @@ export async function getProducts() {
     imageUrl: p.imageUrl,
   }));
 }
+
+export async function getUserByGoogleId(id) {
+  return prisma.user.findUnique({
+    where: {
+      googleId: id,
+    },
+  });
+}

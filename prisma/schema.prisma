@@ -11,8 +11,12 @@ model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
   name         String?
-  role         String   @default("user") 
-  passwordHash String
+  role         String   @default("user")
+
+  passwordHash String?
+  googleId     String?  @unique
+  image        String?
+
   createdAt    DateTime @default(now())
 
   passwordResets PasswordReset[]
