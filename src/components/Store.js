@@ -27,6 +27,7 @@ export default function Store({ products, initialUser = null }) {
   const [picker, setPicker] = useState(null);
   const [preview, setPreview] = useState(null);
   const searchRef = useRef(null);
+  const [previewZoom, setPreviewZoom] = useState(null);
 
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
@@ -242,13 +243,30 @@ export default function Store({ products, initialUser = null }) {
           }}
         >
           <div className="max-w-md pl-6 pt-24">
-            <div className="overflow-hidden rounded-2xl bg-stone-100">
-              <img
-                src={preview.imageUrl}
-                alt={preview.name}
-                className=" h-[560px] w-full object-cover"
-              />
-            </div>
+          <div
+            className="overflow-hidden rounded-2xl bg-stone-100"
+            onMouseMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+
+              setPreviewZoom({
+                x: ((e.clientX - rect.left) / rect.width) * 100,
+                y: ((e.clientY - rect.top) / rect.height) * 100,
+              });
+            }}
+            onMouseLeave={() => setPreviewZoom(null)}
+          >
+            <img
+              src={preview.imageUrl}
+              alt={preview.name}
+              className="h-[560px] w-full object-cover transition-transform duration-150"
+              style={{
+                transform: previewZoom ? "scale(2)" : "scale(1)",
+                transformOrigin: previewZoom
+                  ? `${previewZoom.x}% ${previewZoom.y}%`
+                  : "center",
+              }}
+            />
+          </div>
 
             <div className="mt-5 pb-8">
               <p className="text-xs uppercase tracking-[0.25em] text-stone-400">
