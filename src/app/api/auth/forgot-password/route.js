@@ -20,7 +20,9 @@ export async function POST(req) {
       ? body.email.trim().toLowerCase()
       : "";
 
-  console.log("Şifre sıfırlama isteği:", email);
+  const isDev = process.env.NODE_ENV !== "production";
+
+  if (isDev) console.log("Şifre sıfırlama isteği:", email);
 
   const generic = {
     ok: true,
@@ -28,33 +30,26 @@ export async function POST(req) {
       "Bu e-posta sistemde kayıtlıysa, şifre sıfırlama bağlantısı gönderildi.",
   };
 
-  const user = getUserByEmail(email);
-
-  console.log("Bulunan kullanıcı:", user);
+  const user = await getUserByEmail(email);
 
   if (user) {
-    const token = createPasswordReset(user.id);
+    const token = await createPasswordReset(user.id);
 
     const origin = new URL(req.url).origin;
     const resetUrl = `${origin}/reset-password?token=${token}`;
 
-    console.log("Reset link:", resetUrl);
+    if (isDev) console.log("Reset link:", resetUrl);
 
     try {
-      const result = await resend.emails.send({
+      await resend.emails.send({
         from: "Atolye Store <onboarding@resend.dev>",
         to: email,
         subject: "Şifre Sıfırlama",
         html: `<a href="${resetUrl}">Şifreyi sıfırla</a>`,
       });
-
-      console.log("Resend sonucu:", result);
-      console.log(`Mail gönderildi: ${email}`);
     } catch (err) {
-      console.error("Mail gönderilemedi:", err);
+      console.error("Mail gönderilemedi:", err.message);
     }
-  } else {
-    console.log("Kullanıcı bulunamadı");
   }
 
   return NextResponse.json(generic);

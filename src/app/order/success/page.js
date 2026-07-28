@@ -35,7 +35,9 @@ export default async function OrderSuccessPage({ searchParams }) {
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.metadata?.userId !== user.id) {
+    // Stripe metadata her zaman string döner; user.id ise number, bu yüzden
+    // karşılaştırmadan önce ikisi de aynı tipe çevrilir.
+    if (Number(session.metadata?.userId) !== user.id) {
       return (
         <Wrap title="Yetkisiz" tone="error">
           <p className="text-sm text-stone-500">Bu sipariş sana ait değil.</p>
@@ -44,18 +46,18 @@ export default async function OrderSuccessPage({ searchParams }) {
       );
     }
     if (session.payment_status === "paid") {
-      const updated = markOrderPaidBySession(session.id);
-      orderId = updated?.id ?? session.metadata?.orderId;
+      const updated = await markOrderPaidBySession(session.id);
+      orderId = updated?.id ?? Number(session.metadata?.orderId);
     } else {
-      orderId = session.metadata?.orderId;
+      orderId = Number(session.metadata?.orderId);
     }
   } catch {
     // Stripe'a ulaşılamadıysa DB'de zaten webhook ile işaretlenmiş olabilir; devam et.
-    const fallback = getOrderByStripeSession(sessionId, user.id);
+    const fallback = await getOrderByStripeSession(sessionId, user.id);
     orderId = fallback?.id;
   }
 
-  const order = orderId ? getOrderWithItems(orderId, user.id) : null;
+  const order = orderId ? await getOrderWithItems(orderId, user.id) : null;
   if (!order) {
     return (
       <Wrap title="Sipariş bulunamadı" tone="error">

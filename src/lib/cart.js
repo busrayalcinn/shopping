@@ -7,12 +7,13 @@ const MAX_ITEMS = 50;
 
 // items: [{ id, size, qty }]
 // Dönüş: { error: string } ya da { lines, total }
-export function validateCart(items) {
+export async function validateCart(items) {
   if (!Array.isArray(items) || items.length === 0) return { error: "Sepet boş." };
   if (items.length > MAX_ITEMS) return { error: "Sepette çok fazla kalem var." };
 
   const ids = [...new Set(items.map((i) => Number(i.id)))];
-  const byId = new Map(getProductsByIds(ids).map((p) => [p.id, p]));
+  const products = await getProductsByIds(ids);
+  const byId = new Map(products.map((p) => [p.id, p]));
 
   let total = 0;
   const lines = [];

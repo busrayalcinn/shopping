@@ -35,13 +35,30 @@ model PasswordReset {
 }
 
 model Order {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  total     Int
-  status    String   @default("pending")
-  createdAt DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  customerName    String
+  address         String
+  total           Int
+  status          String   @default("pending") // pending | paid
+  stripeSessionId String?  @unique
+  createdAt       DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user  User        @relation(fields: [userId], references: [id])
+  items OrderItem[]
+}
+
+model OrderItem {
+  id        Int    @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  name      String
+  price     Int
+  size      String
+  qty       Int
+  lineTotal Int
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model Product {

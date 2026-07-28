@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import {
+  prisma,
   getValidPasswordReset,
-  consumePasswordReset,
-  updateUserPassword,
 } from "@/lib/db";
 
 const bad = (msg, status = 400) =>
@@ -32,7 +31,7 @@ export async function POST(req) {
     return bad("Şifre en az 8 karakter olmalı.");
   }
 
-  const reset = getValidPasswordReset(token);
+  const reset = await getValidPasswordReset(token);
 
   if (!reset) {
     return bad(
@@ -43,10 +42,18 @@ export async function POST(req) {
 
   const passwordHash = await bcrypt.hash(password, 12);
 
-  updateUserPassword(reset.userId, passwordHash);
-
-  // Token'ı tek kullanımlık yap
-  consumePasswordReset(token);
+  // Şifreyi güncelleme ve token'ı tek kullanımlık yapma işlemi birlikte, atomik
+  // olarak yapılır (biri başarısız olursa diğeri de geri alınır).
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: reset.userId },
+      data: { passwordHash },
+    }),
+    prisma.passwordReset.update({
+      where: { token },
+      data: { used: true },
+    }),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

@@ -32,12 +32,12 @@ export async function POST(req) {
   if (!name) return bad("Ad Soyad zorunlu.");
   if (!address) return bad("Teslimat adresi zorunlu.");
 
-  const { error, lines, total } = validateCart(body.items);
+  const { error, lines, total } = await validateCart(body.items);
   if (error) return bad(error);
   if (total <= 0) return bad("Sepet tutarı geçersiz.");
 
   // Sipariş 'pending' ödeme durumuyla oluşturulur; ödeme onaylanınca webhook günceller.
-  const order = createOrder({ userId: user.id, name, address, total, lines });
+  const order = await createOrder({ userId: user.id, name, address, total, lines });
 
   let session;
   try {
@@ -63,6 +63,6 @@ export async function POST(req) {
     return bad(e.message || "Stripe oturumu oluşturulamadı.", 502);
   }
 
-  attachStripeSession(order.id, session.id);
+  await attachStripeSession(order.id, session.id);
   return NextResponse.json({ ok: true, url: session.url });
 }

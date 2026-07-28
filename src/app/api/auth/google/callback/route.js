@@ -29,9 +29,6 @@ export async function GET(req) {
 
   const token = await tokenRes.json();
 
-  console.log("TOKEN:");
-  console.log(token);
-
   // kullanıcı bilgisi al
   const userRes = await fetch(
     "https://www.googleapis.com/oauth2/v2/userinfo",
@@ -44,10 +41,6 @@ export async function GET(req) {
   );
 
   const googleUser = await userRes.json();
-
-
-console.log("GOOGLE USER:");
-console.log(googleUser);
 
     let user = await prisma.user.findUnique({
     where: {
