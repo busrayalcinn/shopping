@@ -11,6 +11,10 @@ export default async function OrdersPage() {
 
   const orders = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
+    include: {
+      user: { select: { name: true, email: true } },
+      items: true,
+    },
   });
 
   return (
@@ -44,25 +48,46 @@ export default async function OrdersPage() {
           ) : (
             <div className="divide-y divide-stone-100">
               {orders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex items-center justify-between px-6 py-4"
-                >
-                  <div>
-                    <p className="font-medium">Sipariş #{order.id}</p>
-                    <p className="text-sm text-stone-500">
-                      {new Date(order.createdAt).toLocaleString("tr-TR")}
-                    </p>
+                <div key={order.id} className="px-6 py-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Sipariş #{order.id}</p>
+                      <p className="text-sm text-stone-500">
+                        {new Date(order.createdAt).toLocaleString("tr-TR")}
+                      </p>
+                      <p className="mt-1 text-sm text-stone-600">
+                        {order.user?.name || order.customerName || "—"}
+                        {order.user?.email ? ` · ${order.user.email}` : ""}
+                      </p>
+                      <p className="text-xs text-stone-400">{order.address}</p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="font-semibold">
+                        {Number(order.total).toLocaleString("tr-TR")} ₺
+                      </p>
+                      <span className="inline-flex rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">
+                        {order.status}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="text-right">
-                    <p className="font-semibold">
-                      {Number(order.total).toLocaleString("tr-TR")} ₺
-                    </p>
-                    <span className="inline-flex rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">
-                      {order.status}
-                    </span>
-                  </div>
+                  {order.items.length > 0 && (
+                    <div className="mt-3 rounded-lg bg-stone-50 px-4 py-3">
+                      <ul className="space-y-1 text-sm text-stone-600">
+                        {order.items.map((it) => (
+                          <li key={it.id} className="flex justify-between">
+                            <span>
+                              {it.name} · {it.size} × {it.qty}
+                            </span>
+                            <span className="font-medium text-stone-800">
+                              {Number(it.lineTotal).toLocaleString("tr-TR")} ₺
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
