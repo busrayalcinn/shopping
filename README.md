@@ -1,3 +1,7 @@
+## Preview
+
+![Shopping Application](./screenshots/homepage.png)
+
 # Atölye — Kıyafet Mağazası (Next.js)
 
 PostgreSQL (Prisma ORM), gerçek kimlik doğrulama, korumalı sipariş API'si,
