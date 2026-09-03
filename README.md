@@ -1,6 +1,6 @@
 ## Preview
 
-![Shopping Application](./screenshots/homepage.png)
+![Homepage](./homepage.png)
 
 # Atölye — Kıyafet Mağazası (Next.js)
 
