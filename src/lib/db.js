@@ -37,7 +37,8 @@ export async function createUser({ email, password, name }) {
 export async function verifyUser(email, password) {
   const user = await getUserByEmail(email);
 
-  if (!user) return null;
+  // Google ile açılmış hesapların şifresi olmayabilir
+  if (!user || !user.passwordHash) return null;
 
   const ok = await bcrypt.compare(password, user.passwordHash);
 
@@ -96,20 +97,36 @@ export async function updateUserPassword(userId, passwordHash) {
 // PRODUCT
 // =========================
 
+const SIZE_ORDER = ["XS", "S", "M", "L", "XL"];
+
+function toStockMap(variants = []) {
+  const stock = Object.fromEntries(SIZE_ORDER.map((s) => [s, 0]));
+  for (const v of variants) stock[v.size] = v.stock;
+  return stock;
+}
+
+// Mağaza vitrini: yalnızca satıştaki ürünler + beden bazlı stok
 export async function getProducts() {
   const products = await prisma.product.findMany({
+    where: { active: true },
     orderBy: { id: "asc" },
+    include: { variants: true },
   });
 
-  return products.map((p) => ({
-    id: p.id,
-    name: p.name,
-    price: p.price,
-    cat: p.category,
-    swatch: p.swatch,
-    text: p.textColor,
-    imageUrl: p.imageUrl,
-  }));
+  return products.map((p) => {
+    const stock = toStockMap(p.variants);
+    return {
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      cat: p.category,
+      swatch: p.swatch,
+      text: p.textColor,
+      imageUrl: p.imageUrl,
+      stock,
+      soldOut: Object.values(stock).every((n) => n <= 0),
+    };
+  });
 }
 
 // Sepet doğrulaması için: verilen id listesindeki ürünleri getirir.
@@ -118,12 +135,15 @@ export async function getProductsByIds(ids) {
 
   const products = await prisma.product.findMany({
     where: { id: { in: ids } },
+    include: { variants: true },
   });
 
   return products.map((p) => ({
     id: p.id,
     name: p.name,
     price: p.price,
+    active: p.active,
+    stock: toStockMap(p.variants),
   }));
 }
 
@@ -135,100 +155,4 @@ export async function getUserByGoogleId(id) {
   });
 }
 
-// =========================
-// ORDER
-// =========================
-
-// lines: [{ productId, name, price, size, qty, lineTotal }] (bkz. src/lib/cart.js)
-export async function createOrder({ userId, name, address, total, lines }) {
-  return prisma.order.create({
-    data: {
-      userId,
-      customerName: name,
-      address,
-      total,
-      status: "pending",
-      items: {
-        create: lines.map((l) => ({
-          productId: l.productId,
-          name: l.name,
-          price: l.price,
-          size: l.size,
-          qty: l.qty,
-          lineTotal: l.lineTotal,
-        })),
-      },
-    },
-  });
-}
-
-export async function attachStripeSession(orderId, stripeSessionId) {
-  return prisma.order.update({
-    where: { id: orderId },
-    data: { stripeSessionId },
-  });
-}
-
-// Stripe webhook / success sayfası: session ödendiğinde siparişi 'paid' işaretler.
-export async function markOrderPaidBySession(stripeSessionId) {
-  const order = await prisma.order.findUnique({
-    where: { stripeSessionId },
-  });
-
-  if (!order) return null;
-  if (order.status === "paid") return order;
-
-  return prisma.order.update({
-    where: { stripeSessionId },
-    data: { status: "paid" },
-  });
-}
-
-export async function getOrderByStripeSession(stripeSessionId, userId) {
-  return prisma.order.findFirst({
-    where: { stripeSessionId, userId },
-  });
-}
-
-// Sipariş + kalemleri getirir; /order/success sayfasının beklediği şekle dönüştürür.
-export async function getOrderWithItems(orderId, userId) {
-  const order = await prisma.order.findFirst({
-    where: { id: orderId, userId },
-    include: { items: true },
-  });
-
-  if (!order) return null;
-
-  return {
-    id: order.id,
-    total: order.total,
-    paymentStatus: order.status,
-    items: order.items.map((it) => ({
-      name: it.name,
-      size: it.size,
-      qty: it.qty,
-      lineTotal: it.lineTotal,
-    })),
-  };
-}
-
-export async function getOrdersForUser(userId) {
-  const orders = await prisma.order.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    include: { items: true },
-  });
-
-  return orders.map((o) => ({
-    id: o.id,
-    total: o.total,
-    status: o.status,
-    createdAt: o.createdAt,
-    items: o.items.map((it) => ({
-      name: it.name,
-      size: it.size,
-      qty: it.qty,
-      lineTotal: it.lineTotal,
-    })),
-  }));
-}
+// Sipariş fonksiyonları src/lib/orders.js dosyasına taşındı.

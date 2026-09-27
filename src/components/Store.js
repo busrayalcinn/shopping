@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { ShoppingBag, X, Plus, Minus, User, Search, ArrowRight } from "lucide-react";
-import { SIZES, CATS, MAX_QTY } from "@/lib/constants";
+import Link from "next/link";
+import { ShoppingBag, X, Plus, Minus, User, Search, ArrowRight, Package } from "lucide-react";
+import { SIZES, CATS, MAX_QTY, CART_KEY } from "@/lib/constants";
+import { LOW_STOCK } from "@/lib/orderStatus";
 
 const fmt = (n) => `${n.toLocaleString("tr-TR")} ₺`;
 
@@ -33,6 +35,30 @@ export default function Store({ products, initialUser = null }) {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
 
+  // Sepet tarayıcıda saklanır: Stripe'a gidip "geri dön"e basınca ya da sayfa
+  // yenilenince kaybolmaz.
+  const [cartLoaded, setCartLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
+      if (Array.isArray(saved)) setCart(saved);
+    } catch {}
+    setCartLoaded(true);
+    // /account/orders gibi korumalı sayfalardan ?login=1 ile gelindiyse giriş penceresini aç
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("login") === "1") setAuthOpen(true);
+    // /product/:id sayfasından ?product=:id ile gelindiyse ürünü aç
+    const pid = Number(qs.get("product"));
+    if (pid) setPreview(products.find((p) => p.id === pid) || null);
+  }, []);
+  useEffect(() => {
+    if (!cartLoaded) return;
+    try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {}
+  }, [cart, cartLoaded]);
+
+  // Güncel stok (ürün + beden). Bilinmiyorsa MAX_QTY kabul edilir.
+  const stockOf = (id, size) => products.find((p) => p.id === id)?.stock?.[size] ?? MAX_QTY;
+
   const list = useMemo(() => {
     let l = cat === "Tümü" ? products : products.filter((p) => p.cat === cat);
     const q = query.trim().toLocaleLowerCase("tr-TR");
@@ -47,9 +73,11 @@ export default function Store({ products, initialUser = null }) {
     setCart((c) => {
       const key = `${p.id}-${size}`;
       const found = c.find((i) => `${i.id}-${i.size}` === key);
+      const max = Math.min(MAX_QTY, p.stock?.[size] ?? MAX_QTY);
+      if (max <= 0) return c;
       if (found)
         return c.map((i) =>
-          `${i.id}-${i.size}` === key ? { ...i, qty: Math.min(MAX_QTY, i.qty + 1) } : i
+          `${i.id}-${i.size}` === key ? { ...i, qty: Math.min(max, i.qty + 1) } : i
         );
       return [...c, { id: p.id, name: p.name, price: p.price, imageUrl: p.imageUrl, size, qty: 1 }];
     });
@@ -62,7 +90,7 @@ export default function Store({ products, initialUser = null }) {
       c
         .map((i) =>
           `${i.id}-${i.size}` === key
-            ? { ...i, qty: Math.min(MAX_QTY, i.qty + d) }
+            ? { ...i, qty: Math.min(MAX_QTY, stockOf(i.id, i.size), i.qty + d) }
             : i
         )
         .filter((i) => i.qty > 0)
@@ -83,7 +111,8 @@ export default function Store({ products, initialUser = null }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: cart.map((i) => ({ id: i.id, size: i.size, qty: i.qty })),
-          customer,
+          customer: { name: customer.name, address: customer.address },
+          billing: customer.billing,
         }),
       });
       const data = await res.json();
@@ -154,6 +183,12 @@ export default function Store({ products, initialUser = null }) {
                 {searchOpen ? <X size={18} /> : <Search size={18} />}
               </button>
             </div>
+            {user && (
+              <Link href="/account/orders" aria-label="Siparişlerim" className="flex items-center gap-2 rounded-full p-2 text-stone-500 hover:bg-stone-200/60">
+                <Package size={18} />
+                <span className="hidden text-sm text-stone-700 lg:inline">Siparişlerim</span>
+              </Link>
+            )}
             <button aria-label="Hesap" onClick={() => setAuthOpen(true)} className="flex items-center gap-2 rounded-full p-2 text-stone-500 hover:bg-stone-200/60">
               <User size={18} />
               {user && <span className="hidden text-sm text-stone-700 sm:inline">{user.name}</span>}
@@ -217,9 +252,15 @@ export default function Store({ products, initialUser = null }) {
                   {p.cat}
                 </span>
 
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-medium uppercase tracking-widest text-white opacity-0 transition group-hover:opacity-100">
-                  Sepete ekle
-                </span>
+                {p.soldOut ? (
+                  <span className="absolute right-3 top-3 rounded-full bg-stone-900/80 px-3 py-1 text-xs font-medium text-stone-50">
+                    Tükendi
+                  </span>
+                ) : (
+                  <span className="absolute inset-0 flex items-center justify-center text-sm font-medium uppercase tracking-widest text-white opacity-0 transition group-hover:opacity-100">
+                    Sepete ekle
+                  </span>
+                )}
               </button>
                 <div className="mt-3 flex items-baseline justify-between gap-2">
                   <h3 className="text-sm leading-snug">{p.name}</h3>
@@ -287,14 +328,15 @@ export default function Store({ products, initialUser = null }) {
               </p>
 
               <button
+                disabled={preview.soldOut}
                 onClick={() => {
                   setPreview(null);
                   setOpenedFromCart(false);
                   setPicker(preview);
                 }}
-                className="mt-6 w-full rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 hover:bg-stone-700"
+                className="mt-6 w-full rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 hover:bg-stone-700 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600"
               >
-                Beden Seç ve Sepete Ekle
+                {preview.soldOut ? "Tüm bedenler tükendi" : "Beden Seç ve Sepete Ekle"}
               </button><br></br>
             </div>
           </div>
@@ -329,17 +371,27 @@ export default function Store({ products, initialUser = null }) {
           <div className="px-6 pb-8">
             <p className="mb-3 text-xs uppercase tracking-widest text-stone-400">Beden Seç</p>
             <div className="grid grid-cols-5 gap-2">
-              {SIZES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => addToCart(picker, s)}
-                  className="rounded-xl border border-stone-200 py-3.5 text-sm font-medium text-stone-700 transition hover:border-stone-900 hover:bg-stone-900 hover:text-stone-50 active:scale-95"
-                >
-                  {s}
-                </button>
-              ))}
+              {SIZES.map((s) => {
+                const left = picker.stock?.[s] ?? MAX_QTY;
+                const out = left <= 0;
+                return (
+                  <div key={s} className="text-center">
+                    <button
+                      disabled={out}
+                      onClick={() => addToCart(picker, s)}
+                      aria-label={out ? `${s} bedeni tükendi` : `${s} bedeni sepete ekle`}
+                      className="w-full rounded-xl border border-stone-200 py-3.5 text-sm font-medium text-stone-700 transition hover:border-stone-900 hover:bg-stone-900 hover:text-stone-50 active:scale-95 disabled:cursor-not-allowed disabled:border-dashed disabled:text-stone-300 disabled:line-through disabled:hover:bg-transparent disabled:hover:text-stone-300"
+                    >
+                      {s}
+                    </button>
+                    <p className={`mt-1 h-4 text-[11px] ${out ? "text-stone-400" : "text-amber-700"}`}>
+                      {out ? "Tükendi" : left <= LOW_STOCK ? `Son ${left}` : ""}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
-            <p className="mt-4 text-center text-xs text-stone-400">
+            <p className="mt-3 text-center text-xs text-stone-400">
               Bir beden seçtiğinizde ürün sepete eklenecektir.
             </p>
           </div>
@@ -396,6 +448,14 @@ export default function Store({ products, initialUser = null }) {
                           <div>
                             <p className="text-sm leading-snug">{i.name}</p>
                             <p className="text-xs text-stone-500">Beden {i.size}</p>
+                            {stockOf(i.id, i.size) < i.qty && (
+                              <p className="text-xs text-red-600">
+                                {stockOf(i.id, i.size) === 0 ? "Bu beden tükendi, sepetinden çıkar." : `Stokta yalnızca ${stockOf(i.id, i.size)} adet var.`}
+                              </p>
+                            )}
+                            {stockOf(i.id, i.size) >= i.qty && stockOf(i.id, i.size) <= LOW_STOCK && (
+                              <p className="text-xs text-amber-700">Son {stockOf(i.id, i.size)} ürün</p>
+                            )}
                           </div>
                           <span className="text-sm">{fmt(i.price * i.qty)}</span>
                         </div>
@@ -420,7 +480,7 @@ export default function Store({ products, initialUser = null }) {
                               e.stopPropagation();
                               setQty(key, 1);
                             }}
-                            disabled={i.qty >= MAX_QTY}
+                            disabled={i.qty >= Math.min(MAX_QTY, stockOf(i.id, i.size))}
                             className="rounded border border-stone-300 p-1 hover:bg-stone-100 disabled:opacity-40"
                           >
                             <Plus size={14} />
@@ -459,7 +519,6 @@ function Modal({ children, onClose }) {
     if (!el) return;
 
     const handleScroll = () => {
-      console.log(bodyRef.current.scrollTop);
       setScrolled(el.scrollTop > 5);
     };
 
@@ -554,10 +613,16 @@ function AuthForm({ current, onAuth, onLogout }) {
       <div>
         <h3 className="text-lg font-medium">Merhaba, {current.name}</h3>
         <p className="mt-1 text-sm text-stone-500">{current.email}</p>
+        <Link
+          href="/account/orders"
+          className="mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-stone-900 py-2.5 text-sm font-medium text-stone-50 hover:bg-stone-700"
+        >
+          <Package size={16} /> Siparişlerim
+        </Link>
         <button
           onClick={logout}
           disabled={busy}
-          className="mt-8 w-full rounded-full border border-stone-300 py-2.5 text-sm hover:bg-stone-100 disabled:opacity-50"
+          className="mt-3 w-full rounded-full border border-stone-300 py-2.5 text-sm hover:bg-stone-100 disabled:opacity-50"
         >
           {busy ? "Çıkılıyor…" : "Çıkış yap"}
         </button>
@@ -742,33 +807,107 @@ function AuthForm({ current, onAuth, onLogout }) {
 function PayForm({ total, defaultName, onSubmit, onBack }) {
   const [name, setName] = useState(defaultName || "");
   const [address, setAddress] = useState("");
+  const [billingType, setBillingType] = useState("individual");
+  const [sameAddress, setSameAddress] = useState(true);
+  const [billingAddress, setBillingAddress] = useState("");
+  const [tckn, setTckn] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [taxOffice, setTaxOffice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  const corporate = billingType === "corporate";
+  const digits = (v, n) => v.replace(/\D/g, "").slice(0, n);
 
   const submit = async () => {
     if (!name.trim()) { setError("Ad Soyad zorunlu."); return; }
     if (!address.trim()) { setError("Teslimat adresi zorunlu."); return; }
+    if (!sameAddress && !billingAddress.trim()) { setError("Fatura adresini yaz ya da teslimat adresiyle aynı seç."); return; }
+    if (corporate) {
+      if (!companyName.trim()) { setError("Firma unvanı zorunlu."); return; }
+      if (taxId.length !== 10) { setError("Vergi numarası 10 haneli olmalı."); return; }
+      if (!taxOffice.trim()) { setError("Vergi dairesi zorunlu."); return; }
+    } else if (tckn && tckn.length !== 11) {
+      setError("T.C. kimlik numarası 11 haneli olmalı (ya da boş bırak)."); return;
+    }
     setError("");
     setBusy(true);
-    const err = await onSubmit({ name: name.trim(), address: address.trim() });
+    const err = await onSubmit({
+      name: name.trim(),
+      address: address.trim(),
+      billing: {
+        type: billingType,
+        sameAddress,
+        address: billingAddress.trim(),
+        taxId: corporate ? taxId : tckn,
+        companyName: companyName.trim(),
+        taxOffice: taxOffice.trim(),
+      },
+    });
     setBusy(false);
     if (err) setError(err);
   };
 
+  const clear = (fn) => (v) => { fn(v); setError(""); };
+
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 space-y-3 overflow-y-auto px-5 py-5">
-        <Field label="Ad Soyad" value={name} onChange={(v) => { setName(v); setError(""); }} placeholder="Adın soyadın" />
-        <Field label="Adres" value={address} onChange={(v) => { setAddress(v); setError(""); }} placeholder="Teslimat adresi" />
+        <Field label="Ad Soyad" value={name} onChange={clear(setName)} placeholder="Adın soyadın" />
+        <Field label="Adres" value={address} onChange={clear(setAddress)} placeholder="Teslimat adresi" />
+
+        <fieldset className="pt-3">
+          <legend className="mb-2 text-xs uppercase tracking-wide text-stone-500">Fatura</legend>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            {[["individual", "Bireysel"], ["corporate", "Kurumsal"]].map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                role="radio"
+                aria-checked={billingType === k}
+                onClick={() => { setBillingType(k); setError(""); }}
+                className={`rounded-full border py-2 text-sm ${billingType === k ? "border-stone-900 bg-stone-900 text-stone-50" : "border-stone-300 hover:border-stone-900"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 space-y-3">
+            {corporate ? (
+              <>
+                <Field label="Firma unvanı" value={companyName} onChange={clear(setCompanyName)} placeholder="Örn. Atölye Tekstil Ltd. Şti." />
+                <div className="flex gap-2">
+                  <Field label="Vergi no" value={taxId} onChange={clear((v) => setTaxId(digits(v, 10)))} placeholder="10 hane" inputMode="numeric" />
+                  <Field label="Vergi dairesi" value={taxOffice} onChange={clear(setTaxOffice)} placeholder="Örn. Kadıköy" />
+                </div>
+              </>
+            ) : (
+              <Field label="T.C. kimlik no (isteğe bağlı)" value={tckn} onChange={clear((v) => setTckn(digits(v, 11)))} placeholder="11 hane" inputMode="numeric" />
+            )}
+            <label className="flex items-center gap-2 text-sm text-stone-600">
+              <input type="checkbox" checked={sameAddress} onChange={(e) => setSameAddress(e.target.checked)} />
+              Fatura adresim teslimat adresiyle aynı
+            </label>
+            {!sameAddress && (
+              <Field label="Fatura adresi" value={billingAddress} onChange={clear(setBillingAddress)} placeholder="Fatura adresi" />
+            )}
+          </div>
+        </fieldset>
+
         <p className="pt-2 text-xs text-stone-400">
           Kart bilgisi Stripe'ın kendi güvenli ödeme sayfasında alınır, bu siteden hiç geçmez.
           Test modu kartı: <span className="font-mono">4242 4242 4242 4242</span>, ileri bir tarih, herhangi bir CVC.
         </p>
+        <p className="text-xs text-stone-400">
+          Kargoya verilene kadar siparişini tek tıkla iptal edebilir, teslimattan sonra 14 gün içinde iade edebilirsin.
+        </p>
       </div>
       <div className="border-t border-stone-200 px-5 py-5">
-        {error && <p className="mb-3 text-xs text-red-600">{error}</p>}
+        {error && <p className="mb-3 text-xs text-red-600" role="alert">{error}</p>}
         <div className="mb-4 flex justify-between text-sm">
-          <span className="text-stone-500">Ödenecek</span>
+          <span className="text-stone-500">Ödenecek (KDV dahil)</span>
           <span className="font-semibold">{fmt(total)}</span>
         </div>
         <button onClick={submit} disabled={busy} className="w-full rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 hover:bg-stone-700 disabled:opacity-50">

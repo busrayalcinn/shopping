@@ -1,17 +1,20 @@
 import Link from "next/link";
-import Stripe from "stripe";
+import ClearCart from "@/components/ClearCart";
 import { getSessionUser } from "@/lib/auth";
-import { markOrderPaidBySession, getOrderWithItems, getOrderByStripeSession } from "@/lib/db";
+import { getStripe } from "@/lib/payments";
+import { markOrderPaid, getOrderWithItems, getOrderByStripeSession } from "@/lib/orders";
 
 const fmt = (n) => `${n.toLocaleString("tr-TR")} ₺`;
 
 // Bu sayfa, Stripe'ın barındırdığı ödeme sayfasından success_url'e dönünce açılır.
 // Asıl "ödeme onaylandı" kaydı /api/webhook üzerinden gelir; burada yapılan
-// session.retrieve + markOrderPaidBySession çağrısı, webhook henüz ulaşmamışsa
+// session.retrieve + markOrderPaid çağrısı, webhook henüz ulaşmamışsa
 // (örn. yerelde `stripe listen` çalışmıyorsa) kullanıcıya doğru sonucu göstermek
 // için bir yedek (defense-in-depth) doğrulamadır — tekrar tekrar çağrılsa da güvenlidir.
+export const dynamic = "force-dynamic";
+
 export default async function OrderSuccessPage({ searchParams }) {
-  const sessionId = searchParams?.session_id;
+  const sessionId = (await searchParams)?.session_id;
   const user = await getSessionUser();
 
   if (!user) {
@@ -33,8 +36,7 @@ export default async function OrderSuccessPage({ searchParams }) {
 
   let orderId = null;
   try {
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const session = await getStripe().checkout.sessions.retrieve(sessionId);
     // Stripe metadata her zaman string döner; user.id ise number, bu yüzden
     // karşılaştırmadan önce ikisi de aynı tipe çevrilir.
     if (Number(session.metadata?.userId) !== user.id) {
@@ -46,7 +48,7 @@ export default async function OrderSuccessPage({ searchParams }) {
       );
     }
     if (session.payment_status === "paid") {
-      const updated = await markOrderPaidBySession(session.id);
+      const updated = await markOrderPaid({ stripeSessionId: session.id, paymentIntentId: session.payment_intent });
       orderId = updated?.id ?? Number(session.metadata?.orderId);
     } else {
       orderId = Number(session.metadata?.orderId);
@@ -70,6 +72,7 @@ export default async function OrderSuccessPage({ searchParams }) {
   const paid = order.paymentStatus === "paid";
   return (
     <Wrap title={paid ? "Ödeme alındı ✓" : "Ödeme işleniyor…"} tone={paid ? "ok" : "pending"}>
+      {paid && <ClearCart />}
       <p className="text-sm text-stone-500">
         Sipariş No: <span className="font-mono text-stone-700">{order.id}</span>
       </p>
@@ -91,6 +94,10 @@ export default async function OrderSuccessPage({ searchParams }) {
         <span className="text-stone-500">Toplam</span>
         <span className="font-semibold">{fmt(order.total)}</span>
       </div>
+      <p className="mt-4 text-xs text-stone-500">
+        Faturan ve sipariş durumun <Link href="/account/orders" className="underline hover:text-stone-900">Siparişlerim</Link> sayfasında.
+        Kargoya verilene kadar oradan tek tıkla iptal edebilirsin.
+      </p>
       <BackLink />
     </Wrap>
   );

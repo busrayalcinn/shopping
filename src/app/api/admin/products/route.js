@@ -1,46 +1,39 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSessionUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/adminGuard";
+import { parseProductInput } from "@/lib/productInput";
 
-// GET /api/admin/products
+// GET /api/admin/products  (satıştan kaldırılanlar dahil, stoklarla birlikte)
 export async function GET() {
-  const user = await getSessionUser();
-
-  if (!user || user.role !== "admin") {
-    return NextResponse.json(
-      { error: "Yetkisiz" },
-      { status: 401 }
-    );
-  }
+  const { deny } = await requireAdmin();
+  if (deny) return deny;
 
   const products = await prisma.product.findMany({
     orderBy: { id: "desc" },
+    include: { variants: true },
   });
 
-  return NextResponse.json(products);
+  return NextResponse.json(
+    products.map(({ variants, ...p }) => ({
+      ...p,
+      stock: Object.fromEntries(variants.map((v) => [v.size, v.stock])),
+    }))
+  );
 }
 
 // POST /api/admin/products
 export async function POST(req) {
-  const user = await getSessionUser();
+  const { deny } = await requireAdmin();
+  if (deny) return deny;
 
-  if (!user || user.role !== "admin") {
-    return NextResponse.json(
-      { error: "Yetkisiz" },
-      { status: 401 }
-    );
-  }
-
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
+  const { data, stock, error } = parseProductInput(body);
+  if (error) return NextResponse.json({ error }, { status: 400 });
 
   const product = await prisma.product.create({
     data: {
-      name: body.name,
-      price: Number(body.price),
-      category: body.category,
-      swatch: body.swatch,
-      textColor: body.textColor,
-      imageUrl: body.imageUrl, 
+      ...data,
+      variants: { create: Object.entries(stock).map(([size, n]) => ({ size, stock: n })) },
     },
   });
 

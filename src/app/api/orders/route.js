@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getOrdersForUser } from "@/lib/db";
+import { getOrdersForUser } from "@/lib/orders";
 import { getSessionUser } from "@/lib/auth";
 
-const bad = (msg, status = 400) => NextResponse.json({ error: msg }, { status });
+export const dynamic = "force-dynamic";
 
 // GET /api/orders -> SADECE oturum açan kullanıcının kendi siparişleri
-// (Sipariş oluşturma artık /api/checkout üzerinden Stripe akışıyla yapılıyor.)
 export async function GET() {
   const user = await getSessionUser();
-  if (!user) return bad("Giriş yapmalısın.", 401);
-  return NextResponse.json(getOrdersForUser(user.id));
+  if (!user) return NextResponse.json({ error: "Giriş yapmalısın." }, { status: 401 });
+  return NextResponse.json(await getOrdersForUser(user.id));
 }
