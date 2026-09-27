@@ -1,98 +1,84 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { redirect } from "next/navigation";
+import { ORDER_STATUS } from "@/lib/orderStatus";
+import AdminOrderCard from "@/components/admin/AdminOrderCard";
 
-export default async function OrdersPage() {
+export const dynamic = "force-dynamic";
+
+const TABS = [
+  { key: "todo", label: "Yapılacaklar", where: { status: { in: ["paid", "preparing"] } } },
+  { key: "shipped", label: "Kargoda", where: { status: "shipped" } },
+  { key: "delivered", label: "Teslim edildi", where: { status: "delivered" } },
+  { key: "cancelled", label: "İptal", where: { status: "cancelled" } },
+  { key: "all", label: "Tümü", where: { status: { not: "expired" } } },
+];
+
+export default async function OrdersPage({ searchParams }) {
   const user = await getSessionUser();
+  if (!user || user.role !== "admin") redirect("/");
 
-  if (!user || user.role !== "admin") {
-    redirect("/");
-  }
+  const tabKey = (await searchParams)?.tab || "todo";
+  const tab = TABS.find((t) => t.key === tabKey) || TABS[0];
 
-  const orders = await prisma.order.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      user: { select: { name: true, email: true } },
-      items: true,
-    },
-  });
+  const [orders, counts] = await Promise.all([
+    prisma.order.findMany({
+      where: tab.where,
+      orderBy: { createdAt: tab.key === "todo" ? "asc" : "desc" }, // yapılacaklarda en eski sipariş üstte
+      take: 200,
+      include: {
+        user: { select: { name: true, email: true } },
+        items: true,
+        invoice: { select: { number: true, status: true } },
+        events: { where: { type: "refund_failed" }, select: { id: true } },
+      },
+    }),
+    prisma.order.groupBy({ by: ["status"], _count: true }),
+  ]);
+  const countOf = (statuses) => counts.filter((c) => statuses.includes(c.status)).reduce((s, c) => s + c._count, 0);
 
   return (
-    <div className="min-h-screen bg-stone-50 p-8">
+    <div className="min-h-screen bg-stone-50 p-6 sm:p-8">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-widest text-stone-400">
-              Admin / Siparişler
-            </p>
+            <p className="text-sm text-stone-400">Admin / Siparişler</p>
             <h1 className="text-3xl font-semibold">Sipariş Yönetimi</h1>
           </div>
-
-          <a
-            href="/admin"
-            className="rounded-full border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100"
-          >
-            ← Dashboard
-          </a>
+          <Link href="/admin" className="rounded-full border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100">← Dashboard</Link>
         </div>
 
-        <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
-          <div className="border-b border-stone-200 px-6 py-4">
-            <h2 className="font-semibold">Tüm Siparişler ({orders.length})</h2>
+        <nav className="mb-6 flex flex-wrap gap-2">
+          {TABS.map((t) => {
+            const n = t.key === "todo" ? countOf(["paid", "preparing"]) : t.key === "all" ? null : countOf([t.key]);
+            return (
+              <Link
+                key={t.key}
+                href={`/admin/orders?tab=${t.key}`}
+                className={`rounded-full border px-4 py-1.5 text-sm ${t.key === tab.key ? "border-stone-900 bg-stone-900 text-stone-50" : "border-stone-300 hover:border-stone-900"}`}
+              >
+                {t.label}{n !== null && <span className="ml-1.5 opacity-60">{n}</span>}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {orders.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-stone-300 p-10 text-center text-stone-500">
+            {tab.key === "todo" ? "Hazırlanacak sipariş yok." : "Bu durumda sipariş yok."}
           </div>
-
-          {orders.length === 0 ? (
-            <div className="p-10 text-center text-stone-500">
-              Henüz sipariş yok.
-            </div>
-          ) : (
-            <div className="divide-y divide-stone-100">
-              {orders.map((order) => (
-                <div key={order.id} className="px-6 py-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Sipariş #{order.id}</p>
-                      <p className="text-sm text-stone-500">
-                        {new Date(order.createdAt).toLocaleString("tr-TR")}
-                      </p>
-                      <p className="mt-1 text-sm text-stone-600">
-                        {order.user?.name || order.customerName || "—"}
-                        {order.user?.email ? ` · ${order.user.email}` : ""}
-                      </p>
-                      <p className="text-xs text-stone-400">{order.address}</p>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="font-semibold">
-                        {Number(order.total).toLocaleString("tr-TR")} ₺
-                      </p>
-                      <span className="inline-flex rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">
-                        {order.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  {order.items.length > 0 && (
-                    <div className="mt-3 rounded-lg bg-stone-50 px-4 py-3">
-                      <ul className="space-y-1 text-sm text-stone-600">
-                        {order.items.map((it) => (
-                          <li key={it.id} className="flex justify-between">
-                            <span>
-                              {it.name} · {it.size} × {it.qty}
-                            </span>
-                            <span className="font-medium text-stone-800">
-                              {Number(it.lineTotal).toLocaleString("tr-TR")} ₺
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((o) => (
+              <AdminOrderCard
+                key={o.id}
+                order={JSON.parse(JSON.stringify({ ...o, refundFailed: o.events.length > 0 && o.refundedAmount < o.total }))}
+                statusLabel={ORDER_STATUS[o.status]?.label || o.status}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
