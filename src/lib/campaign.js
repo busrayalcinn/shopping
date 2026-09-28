@@ -2,11 +2,12 @@
 // ürün kartı) aynı fonksiyonu kullanır; böylece müşterinin sepette gördüğü
 // tutar ile kartından çekilen tutar her zaman aynıdır.
 //
-// Kural: "Üst Giyim" kategorisinde her 2 üründen UCUZ OLANA %20 indirim.
-// Sepetteki tüm üst giyim ürünleri (farklı ürün/beden fark etmez) fiyata göre
-// pahalıdan ucuza dizilir; 2., 4., 6. … ürünler indirimli olur.
-//   Örn. 890 ₺ kazak + 540 ₺ gömlek  → gömlek %20 indirimli (108 ₺)
-//   Örn. 3 × 260 ₺ tişört            → 1 tanesi indirimli (52 ₺)
+// Kural: "Üst Giyim" kategorisinde 2. ürüne %20 indirim, indirim EN UCUZ ürünlere.
+// Sepetteki üst giyim adedinin yarısı kadar ürün (aşağı yuvarlanır) indirimli
+// olur ve bunlar her zaman en ucuz olanlardır (farklı ürün/beden fark etmez).
+//   Örn. 890 ₺ + 540 ₺            → 540 ₺ indirimli
+//   Örn. 890 ₺ + 540 ₺ + 260 ₺    → 260 ₺ indirimli (1 indirim, en ucuza)
+//   Örn. 890 + 650 + 540 + 260 ₺  → 540 ₺ ve 260 ₺ indirimli
 
 export const CAMPAIGN = {
   id: "ust-giyim-2-urune-20",
@@ -37,10 +38,11 @@ export function discountedQuantities(lines) {
     if (l.category !== CAMPAIGN.category) continue;
     for (let i = 0; i < l.qty; i++) units.push({ key: l.key, price: l.price });
   }
-  // Pahalıdan ucuza; eşit fiyatta anahtara göre (sunucu ve istemci aynı sonucu versin)
-  units.sort((a, b) => b.price - a.price || String(a.key).localeCompare(String(b.key)));
+  // Ucuzdan pahalıya; eşit fiyatta anahtara göre (sunucu ve istemci aynı sonucu versin)
+  units.sort((a, b) => a.price - b.price || String(a.key).localeCompare(String(b.key)));
 
-  for (let i = 1; i < units.length; i += 2) {
+  const discountCount = Math.floor(units.length / 2);
+  for (let i = 0; i < discountCount; i++) {
     result.set(units[i].key, result.get(units[i].key) + 1);
   }
   return result;
