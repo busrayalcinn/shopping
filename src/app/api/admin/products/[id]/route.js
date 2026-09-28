@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/adminGuard";
-import { parseProductInput } from "@/lib/productInput";
+import { parseProductInput, saveColors, productErrorResponse } from "@/lib/productInput";
 
-// PUT /api/admin/products/:id  — ürün bilgisi + beden stokları
+// PUT /api/admin/products/:id  — ürün bilgisi + renkler + renk/beden stokları
 export async function PUT(req, { params }) {
   const { deny } = await requireAdmin();
   if (deny) return deny;
@@ -11,22 +11,21 @@ export async function PUT(req, { params }) {
   const { id } = await params;
   const productId = Number(id);
   const body = await req.json().catch(() => ({}));
-  const { data, stock, error } = parseProductInput(body);
+  const { data, colors, error } = parseProductInput(body);
   if (error) return NextResponse.json({ error }, { status: 400 });
 
-  const product = await prisma.$transaction(async (tx) => {
-    const p = await tx.product.update({ where: { id: productId }, data });
-    for (const [size, n] of Object.entries(stock)) {
-      await tx.productVariant.upsert({
-        where: { productId_size: { productId, size } },
-        update: { stock: n },
-        create: { productId, size, stock: n },
-      });
-    }
-    return p;
-  });
-
-  return NextResponse.json({ ok: true, product });
+  try {
+    const product = await prisma.$transaction(async (tx) => {
+      const p = await tx.product.update({ where: { id: productId }, data });
+      await saveColors(tx, productId, colors);
+      return p;
+    });
+    return NextResponse.json({ ok: true, product });
+  } catch (e) {
+    const r = productErrorResponse(e);
+    if (r) return NextResponse.json({ error: r.error }, { status: r.status });
+    throw e;
+  }
 }
 
 // DELETE /api/admin/products/:id

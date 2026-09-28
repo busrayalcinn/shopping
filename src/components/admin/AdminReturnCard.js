@@ -52,7 +52,7 @@ export default function AdminReturnCard({ ret }) {
       <ul className="mt-3 space-y-1 rounded-lg bg-stone-50 px-4 py-3 text-sm">
         {ret.items.map((ri) => (
           <li key={ri.id} className="flex justify-between">
-            <span>{ri.orderItem.name} · {ri.orderItem.size} × {ri.qty}</span>
+            <span>{ri.orderItem.name} · {ri.orderItem.colorName ? `${ri.orderItem.colorName} · ` : ""}{ri.orderItem.size} × {ri.qty}</span>
             <span>{fmtTL(ri.amount || ri.orderItem.price * ri.qty)}</span>
           </li>
         ))}

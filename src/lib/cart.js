@@ -1,5 +1,5 @@
-// Sepet doğrulama: fiyat/beden/adet/stok ve kampanya indirimi SUNUCUDA yeniden
-// hesaplanır, istemciden gelen fiyata asla güvenilmez. /api/checkout kullanır.
+// Sepet doğrulama: fiyat/renk/beden/adet/stok ve kampanya indirimi SUNUCUDA
+// yeniden hesaplanır, istemciden gelen fiyata asla güvenilmez. /api/checkout kullanır.
 // Not: buradaki stok kontrolü kullanıcıya erken ve anlaşılır hata vermek içindir;
 // kesin kontrol src/lib/orders.js içindeki atomik rezervasyondadır.
 import { getProductsByIds } from "@/lib/db";
@@ -8,19 +8,19 @@ import { priceCart, CAMPAIGN } from "@/lib/campaign";
 
 const MAX_ITEMS = 50;
 
-// items: [{ id, size, qty }]
+// items: [{ id, colorId, size, qty }]
 // Dönüş: { error, status? } ya da { lines, subtotal, discount, total, campaign }
 export async function validateCart(items) {
   if (!Array.isArray(items) || items.length === 0) return { error: "Sepet boş." };
   if (items.length > MAX_ITEMS) return { error: "Sepette çok fazla kalem var." };
 
-  // Aynı ürün + beden birden çok kez geldiyse tek satırda birleştir
+  // Aynı ürün + renk + beden birden çok kez geldiyse tek satırda birleştir
   const merged = new Map();
   for (const it of items) {
-    const key = `${Number(it.id)}-${it.size}`;
+    const key = `${Number(it.id)}-${Number(it.colorId)}-${it.size}`;
     const qty = Number(it.qty);
     const prev = merged.get(key);
-    merged.set(key, { id: Number(it.id), size: it.size, qty: prev ? prev.qty + qty : qty });
+    merged.set(key, { id: Number(it.id), colorId: Number(it.colorId), size: it.size, qty: prev ? prev.qty + qty : qty });
   }
 
   const ids = [...new Set([...merged.values()].map((i) => i.id))];
@@ -31,21 +31,35 @@ export async function validateCart(items) {
   for (const [key, it] of merged) {
     const product = byId.get(it.id);
     if (!product || !product.active) return { error: "Sepetindeki bir ürün artık satışta değil. Sepetinden çıkarıp tekrar dene." };
+
+    const color = product.colors.find((c) => c.id === it.colorId);
+    if (!color) return { error: `${product.name} için seçtiğin renk artık satışta değil. Sepetinden çıkarıp tekrar dene.` };
     if (!SIZES.includes(it.size)) return { error: `Geçersiz beden: ${it.size}` };
 
     if (!Number.isInteger(it.qty) || it.qty < 1 || it.qty > MAX_QTY) {
       return { error: `Geçersiz adet (1–${MAX_QTY} arası olmalı).` };
     }
 
-    const left = product.stock[it.size] ?? 0;
+    const label = `${product.name} (${color.name}, ${it.size})`;
+    const left = color.stock[it.size] ?? 0;
     if (left < it.qty) {
       return {
-        error: left > 0 ? `${product.name} (${it.size}) için stokta yalnızca ${left} adet var.` : `${product.name} (${it.size}) tükendi.`,
+        error: left > 0 ? `${label} için stokta yalnızca ${left} adet var.` : `${label} tükendi.`,
         status: 409,
       };
     }
 
-    raw.push({ key, productId: product.id, name: product.name, price: product.price, size: it.size, qty: it.qty, category: product.category });
+    raw.push({
+      key,
+      productId: product.id,
+      name: product.name,
+      price: product.price,
+      colorId: color.id,
+      colorName: color.name,
+      size: it.size,
+      qty: it.qty,
+      category: product.category,
+    });
   }
 
   const priced = priceCart(raw);
@@ -55,6 +69,8 @@ export async function validateCart(items) {
       productId: l.productId,
       name: l.name,
       price: l.price,
+      colorId: l.colorId,
+      colorName: l.colorName,
       size: l.size,
       qty: l.qty,
       lineTotal: l.lineTotal,

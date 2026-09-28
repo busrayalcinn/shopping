@@ -71,7 +71,7 @@ export default function AdminOrderCard({ order, statusLabel }) {
         {order.items.map((it) => (
           <li key={it.id} className="flex justify-between">
             <span>
-              {it.name} · {it.size} × {it.qty}
+              {it.name} · {it.colorName ? `${it.colorName} · ` : ""}{it.size} × {it.qty}
               {it.discountQty > 0 && <span className="ml-1.5 text-xs text-rose-700">({it.discountQty} indirimli)</span>}
             </span>
             <span>{fmtTL(it.lineTotal)}</span>

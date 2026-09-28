@@ -91,6 +91,8 @@ model OrderItem {
   productId Int
   name      String
   price     Int
+  colorId   Int?   // eski siparişlerde boş olabilir
+  colorName String? // sipariş anındaki renk adı (renk sonradan silinse de kalır)
   size      String
   qty       Int
   lineTotal Int    // bu satırda ödenen tutar (indirim düşülmüş)
@@ -125,19 +127,40 @@ model Product {
   active    Boolean  @default(true) // silmek yerine satıştan kaldırmak için
   createdAt DateTime @default(now())
 
+  colors   ProductColor[]
   variants ProductVariant[]
 }
 
-// Beden bazlı stok
+// Ürünün renk seçenekleri. Her rengin kendi fotoğrafı olabilir.
+model ProductColor {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  name      String
+  hex       String  // arayüzde gösterilen renk, örn. "#1c1917"
+  imageUrl  String? // bu rengin fotoğrafı; yoksa düz renk gösterilir
+  position  Int     @default(0)
+  active    Boolean @default(true)
+
+  product  Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variants ProductVariant[]
+
+  @@unique([productId, name])
+  @@index([productId])
+}
+
+// Renk + beden bazlı stok
 model ProductVariant {
   id        Int    @id @default(autoincrement())
   productId Int
+  colorId   Int
   size      String
   stock     Int    @default(0)
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  color   ProductColor @relation(fields: [colorId], references: [id], onDelete: Cascade)
 
-  @@unique([productId, size])
+  @@unique([colorId, size])
+  @@index([productId])
 }
 
 // İade talebi: requested → approved → refunded   (veya rejected)

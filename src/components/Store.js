@@ -19,6 +19,82 @@ function useEscape(onClose) {
   }, [onClose]);
 }
 
+// Sepet kalemi anahtarı: aynı ürünün farklı renk/bedenleri ayrı satırdır
+function itemKey(i) {
+  return `${i.id}-${i.colorId}-${i.size}`;
+}
+
+// Açık renklerde koyu, koyu renklerde açık yazı
+function isDark(hex = "#ffffff") {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b < 140;
+}
+
+// Seçili rengin fotoğrafı. Fotoğrafı yüklenmemiş renkte, yanıltıcı olmasın diye
+// başka rengin fotoğrafı yerine rengin kendisi ve kısa bir not gösterilir.
+function ProductImage({ color, alt, className = "", style, compact = false }) {
+  if (color?.imageUrl) {
+    return <img key={color.imageUrl} src={color.imageUrl} alt={alt} className={`block ${className}`} style={style} />;
+  }
+  const hex = color?.hex || "#d6d3d1";
+  return (
+    <div
+      role="img"
+      aria-label={`${alt} — fotoğraf yakında`}
+      className={`${className} flex items-end justify-center`}
+      style={{ ...style, background: hex }}
+    >
+      {!compact && (
+        <span className={`mb-14 text-xs tracking-wide ${isDark(hex) ? "text-white/80" : "text-stone-700/80"}`}>
+          {color?.name} · Fotoğraf yakında
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CartThumb({ item, alt, className }) {
+  return <ProductImage color={{ imageUrl: item.imageUrl, hex: item.colorHex, name: item.colorName }} alt={alt} className={className} compact />;
+}
+
+// Renk seçimi. Tükenen renkler seçilebilir (görmek için) ama çapraz çizgiyle gösterilir.
+function ColorSwatches({ colors, selected, onPick, size = "md" }) {
+  const dim = size === "sm" ? "h-4 w-4" : "h-8 w-8";
+  const shown = size === "sm" ? colors.slice(0, 6) : colors;
+  return (
+    <div className={`flex flex-wrap items-center ${size === "sm" ? "mt-2 gap-1.5" : "gap-2"}`} role="radiogroup" aria-label="Renk seç">
+      {shown.map((c) => {
+        const active = selected?.id === c.id;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={`${c.name}${c.soldOut ? " (tükendi)" : ""}`}
+            title={`${c.name}${c.soldOut ? " — tükendi" : ""}`}
+            onClick={(e) => { e.stopPropagation(); onPick(c); }}
+            className={`relative ${dim} shrink-0 rounded-full border transition ${
+              active ? "border-stone-900 ring-2 ring-stone-900 ring-offset-2" : "border-stone-300 hover:border-stone-600"
+            }`}
+            style={{ background: c.hex }}
+          >
+            {c.soldOut && (
+              <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+                <span className={`block h-px w-[120%] rotate-45 ${isDark(c.hex) ? "bg-white/80" : "bg-stone-700/70"}`} />
+              </span>
+            )}
+          </button>
+        );
+      })}
+      {size === "sm" && colors.length > shown.length && (
+        <span className="text-[11px] text-stone-500">+{colors.length - shown.length}</span>
+      )}
+    </div>
+  );
+}
+
 export default function Store({ products, initialUser = null }) {
   const [cat, setCat] = useState("Tümü");
   const [query, setQuery] = useState("");
@@ -29,6 +105,8 @@ export default function Store({ products, initialUser = null }) {
   const [authOpen, setAuthOpen] = useState(false);
   const [checkout, setCheckout] = useState("cart"); // cart | pay
   const [picker, setPicker] = useState(null);
+  // Her ürün için seçili renk (kart, önizleme ve beden seçimi aynı seçimi paylaşır)
+  const [activeColor, setActiveColor] = useState({});
   const [preview, setPreview] = useState(null);
   const searchRef = useRef(null);
   const [previewZoom, setPreviewZoom] = useState(null);
@@ -43,7 +121,17 @@ export default function Store({ products, initialUser = null }) {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
-      if (Array.isArray(saved)) setCart(saved);
+      if (Array.isArray(saved)) {
+        // Renkler eklenmeden önce kaydedilmiş sepet kalemlerini ürünün ilk rengine taşı
+        const migrated = saved
+          .map((i) => {
+            if (i.colorId) return i;
+            const c = products.find((p) => p.id === i.id)?.colors?.[0];
+            return c ? { ...i, colorId: c.id, colorName: c.name, colorHex: c.hex, imageUrl: c.imageUrl } : null;
+          })
+          .filter(Boolean);
+        setCart(migrated);
+      }
     } catch {}
     setCartLoaded(true);
     // /account/orders gibi korumalı sayfalardan ?login=1 ile gelindiyse giriş penceresini aç
@@ -84,7 +172,20 @@ export default function Store({ products, initialUser = null }) {
   }, [router]);
 
   // Güncel stok (ürün + beden). Bilinmiyorsa MAX_QTY kabul edilir.
-  const stockOf = (id, size) => products.find((p) => p.id === id)?.stock?.[size] ?? MAX_QTY;
+  // Seçili renk: kullanıcının seçtiği, yoksa stoğu olan ilk renk, o da yoksa ilk renk
+  const colorOf = (p) => {
+    if (!p?.colors?.length) return null;
+    return (
+      p.colors.find((c) => c.id === activeColor[p.id]) ||
+      p.colors.find((c) => !c.soldOut) ||
+      p.colors[0]
+    );
+  };
+  const pickColor = (p, c) => setActiveColor((m) => ({ ...m, [p.id]: c.id }));
+
+  // Güncel stok (ürün + renk + beden). Renk artık satışta değilse 0.
+  const stockOf = (i) =>
+    products.find((p) => p.id === i.id)?.colors?.find((c) => c.id === i.colorId)?.stock?.[i.size] ?? 0;
 
   const list = useMemo(() => {
     let l = cat === "Tümü" ? products : products.filter((p) => p.cat === cat);
@@ -100,7 +201,7 @@ export default function Store({ products, initialUser = null }) {
     () =>
       priceCart(
         cart.map((i) => ({
-          key: `${i.id}-${i.size}`,
+          key: itemKey(i),
           price: i.price,
           qty: i.qty,
           category: products.find((p) => p.id === i.id)?.cat,
@@ -112,17 +213,30 @@ export default function Store({ products, initialUser = null }) {
   const lineOf = (key) => pricing.lines.find((l) => l.key === key);
   const campaignUnits = pricing.lines.filter((l) => l.category === CAMPAIGN.category).reduce((s, l) => s + l.qty, 0);
 
-  const addToCart = (p, size) => {
+  const addToCart = (p, color, size) => {
     setCart((c) => {
-      const key = `${p.id}-${size}`;
-      const found = c.find((i) => `${i.id}-${i.size}` === key);
-      const max = Math.min(MAX_QTY, p.stock?.[size] ?? MAX_QTY);
+      const key = `${p.id}-${color.id}-${size}`;
+      const found = c.find((i) => itemKey(i) === key);
+      const max = Math.min(MAX_QTY, color.stock?.[size] ?? 0);
       if (max <= 0) return c;
       if (found)
         return c.map((i) =>
-          `${i.id}-${i.size}` === key ? { ...i, qty: Math.min(max, i.qty + 1) } : i
+          itemKey(i) === key ? { ...i, qty: Math.min(max, i.qty + 1) } : i
         );
-      return [...c, { id: p.id, name: p.name, price: p.price, imageUrl: p.imageUrl, size, qty: 1 }];
+      return [
+        ...c,
+        {
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          colorId: color.id,
+          colorName: color.name,
+          colorHex: color.hex,
+          imageUrl: color.imageUrl,
+          size,
+          qty: 1,
+        },
+      ];
     });
     setPicker(null);
     setCartOpen(true);
@@ -132,8 +246,8 @@ export default function Store({ products, initialUser = null }) {
     setCart((c) =>
       c
         .map((i) =>
-          `${i.id}-${i.size}` === key
-            ? { ...i, qty: Math.min(MAX_QTY, stockOf(i.id, i.size), i.qty + d) }
+          itemKey(i) === key
+            ? { ...i, qty: d < 0 ? i.qty + d : Math.min(MAX_QTY, stockOf(i), i.qty + d) }
             : i
         )
         .filter((i) => i.qty > 0)
@@ -153,7 +267,7 @@ export default function Store({ products, initialUser = null }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: cart.map((i) => ({ id: i.id, size: i.size, qty: i.qty })),
+          items: cart.map((i) => ({ id: i.id, colorId: i.colorId, size: i.size, qty: i.qty })),
           customer: { name: customer.name, address: customer.address },
           billing: customer.billing,
         }),
@@ -187,6 +301,7 @@ export default function Store({ products, initialUser = null }) {
 
     setOpenedFromCart(true);
     setCartOpen(false);
+    setActiveColor((m) => ({ ...m, [product.id]: item.colorId }));
     setPreview(product);
   }
 
@@ -291,11 +406,10 @@ export default function Store({ products, initialUser = null }) {
               <div key={p.id} className="group">
               <button
                 onClick={() => setPreview(p)}
-                className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-stone-100"
+                className="relative block aspect-[3/4] w-full overflow-hidden rounded-xl bg-stone-100"
               >
-                <img
-                
-                  src={p.imageUrl || "/placeholder.jpg"}
+                <ProductImage
+                  color={colorOf(p)}
                   alt={p.name}
                   className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                 />
@@ -326,6 +440,9 @@ export default function Store({ products, initialUser = null }) {
                   <h3 className="text-sm leading-snug">{p.name}</h3>
                   <span className="shrink-0 text-sm font-medium">{fmt(p.price)}</span>
                 </div>
+                {p.colors.length > 1 && (
+                  <ColorSwatches colors={p.colors} selected={colorOf(p)} onPick={(c) => pickColor(p, c)} size="sm" />
+                )}
               </div>
             ))}
           </div>
@@ -356,9 +473,9 @@ export default function Store({ products, initialUser = null }) {
             }}
             onMouseLeave={() => setPreviewZoom(null)}
           >
-            <img
-              src={preview.imageUrl}
-              alt={preview.name}
+            <ProductImage
+              color={colorOf(preview)}
+              alt={`${preview.name} — ${colorOf(preview)?.name}`}
               className="h-[560px] w-full object-cover transition-transform duration-150"
               style={{
                 transform: previewZoom ? "scale(2)" : "scale(1)",
@@ -387,13 +504,21 @@ export default function Store({ products, initialUser = null }) {
                 </p>
               )}
 
+              <div className="mt-5">
+                <p className="mb-2 text-sm">
+                  <span className="text-stone-500">Renk:</span> {colorOf(preview)?.name}
+                  {colorOf(preview)?.soldOut && <span className="ml-2 text-xs text-stone-400">(tükendi)</span>}
+                </p>
+                <ColorSwatches colors={preview.colors} selected={colorOf(preview)} onPick={(c) => pickColor(preview, c)} />
+              </div>
+
               <p className="mt-4 text-sm leading-6 text-stone-600">
                 Zarif duruşu, seçkin kumaş kalitesi ve özgün tasarımıyla stilinize
                 benzersiz bir imza katacak özel bir koleksiyon parçası.
               </p>
 
               <button
-                disabled={preview.soldOut}
+                disabled={colorOf(preview)?.soldOut}
                 onClick={() => {
                   setPreview(null);
                   setOpenedFromCart(false);
@@ -401,7 +526,11 @@ export default function Store({ products, initialUser = null }) {
                 }}
                 className="mt-6 w-full rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 hover:bg-stone-700 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600"
               >
-                {preview.soldOut ? "Tüm bedenler tükendi" : "Beden Seç ve Sepete Ekle"}
+                {preview.soldOut
+                  ? "Tüm renkler tükendi"
+                  : colorOf(preview)?.soldOut
+                  ? "Bu renk tükendi, başka bir renk seç"
+                  : "Beden Seç ve Sepete Ekle"}
               </button><br></br>
             </div>
           </div>
@@ -419,9 +548,10 @@ export default function Store({ products, initialUser = null }) {
           }}
         >
           <div className="flex gap-5 px-6 pt-24 pb-8">
-            <img
-              src={picker.imageUrl || "/placeholder.jpg"}
+            <ProductImage
+              color={colorOf(picker)}
               alt={picker.name}
+              compact
               className="h-32 w-24 shrink-0 rounded-xl object-cover shadow-sm"
             />
             <div className="min-w-0">
@@ -430,20 +560,29 @@ export default function Store({ products, initialUser = null }) {
               </p>
               <h3 className="mt-1 text-lg font-semibold leading-snug">{picker.name}</h3>
               <p className="mt-1 text-sm text-stone-500">{fmt(picker.price)}</p>
+              <p className="mt-1 text-sm">
+                <span className="text-stone-500">Renk:</span> {colorOf(picker)?.name}
+              </p>
             </div>
           </div>
+
+          {picker.colors.length > 1 && (
+            <div className="px-6 pb-5">
+              <ColorSwatches colors={picker.colors} selected={colorOf(picker)} onPick={(c) => pickColor(picker, c)} />
+            </div>
+          )}
 
           <div className="px-6 pb-8">
             <p className="mb-3 text-xs uppercase tracking-widest text-stone-400">Beden Seç</p>
             <div className="grid grid-cols-5 gap-2">
               {SIZES.map((s) => {
-                const left = picker.stock?.[s] ?? MAX_QTY;
+                const left = colorOf(picker)?.stock?.[s] ?? 0;
                 const out = left <= 0;
                 return (
                   <div key={s} className="text-center">
                     <button
                       disabled={out}
-                      onClick={() => addToCart(picker, s)}
+                      onClick={() => addToCart(picker, colorOf(picker), s)}
                       aria-label={out ? `${s} bedeni tükendi` : `${s} bedeni sepete ekle`}
                       className="w-full rounded-xl border border-stone-200 py-3.5 text-sm font-medium text-stone-700 transition hover:border-stone-900 hover:bg-stone-900 hover:text-stone-50 active:scale-95 disabled:cursor-not-allowed disabled:border-dashed disabled:text-stone-300 disabled:line-through disabled:hover:bg-transparent disabled:hover:text-stone-300"
                     >
@@ -495,15 +634,15 @@ export default function Store({ products, initialUser = null }) {
             <>
               <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
                 {cart.map((i) => {
-                  const key = `${i.id}-${i.size}`;
+                  const key = itemKey(i);
                   return (
                     <div
                       key={key}
                       onClick={() => openProductFromCart(i)}
                       className="flex gap-3 cursor-pointer rounded-xl p-2 transition hover:bg-stone-100"
                     >
-                      <img
-                        src={i.imageUrl || "/placeholder.jpg"}
+                      <CartThumb
+                        item={i}
                         alt={i.name}
                         className="h-20 w-16 shrink-0 rounded-xl border border-stone-200 object-cover shadow-sm"
                       />
@@ -512,14 +651,17 @@ export default function Store({ products, initialUser = null }) {
                         <div className="flex justify-between gap-2">
                           <div>
                             <p className="text-sm leading-snug">{i.name}</p>
-                            <p className="text-xs text-stone-500">Beden {i.size}</p>
-                            {stockOf(i.id, i.size) < i.qty && (
+                            <p className="flex items-center gap-1.5 text-xs text-stone-500">
+                              <span className="inline-block h-2.5 w-2.5 rounded-full border border-stone-300" style={{ background: i.colorHex }} />
+                              {i.colorName} · Beden {i.size}
+                            </p>
+                            {stockOf(i) < i.qty && (
                               <p className="text-xs text-red-600">
-                                {stockOf(i.id, i.size) === 0 ? "Bu beden tükendi, sepetinden çıkar." : `Stokta yalnızca ${stockOf(i.id, i.size)} adet var.`}
+                                {stockOf(i) === 0 ? "Bu renk/beden tükendi, sepetinden çıkar." : `Stokta yalnızca ${stockOf(i)} adet var.`}
                               </p>
                             )}
-                            {stockOf(i.id, i.size) >= i.qty && stockOf(i.id, i.size) <= LOW_STOCK && (
-                              <p className="text-xs text-amber-700">Son {stockOf(i.id, i.size)} ürün</p>
+                            {stockOf(i) >= i.qty && stockOf(i) <= LOW_STOCK && (
+                              <p className="text-xs text-amber-700">Son {stockOf(i)} ürün</p>
                             )}
                           </div>
                           <span className="shrink-0 text-right text-sm">
@@ -554,7 +696,7 @@ export default function Store({ products, initialUser = null }) {
                               e.stopPropagation();
                               setQty(key, 1);
                             }}
-                            disabled={i.qty >= Math.min(MAX_QTY, stockOf(i.id, i.size))}
+                            disabled={i.qty >= Math.min(MAX_QTY, stockOf(i))}
                             className="rounded border border-stone-300 p-1 hover:bg-stone-100 disabled:opacity-40"
                           >
                             <Plus size={14} />

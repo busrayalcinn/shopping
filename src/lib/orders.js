@@ -27,21 +27,35 @@ function addEvent(tx, orderId, type, message) {
   return tx.orderEvent.create({ data: { orderId, type, message } });
 }
 
-// Aynı ürün+beden birden çok satırda gelirse tek satırda topla
+// Aynı ürün+renk+beden birden çok satırda gelirse tek satırda topla
 function groupLines(lines) {
   const map = new Map();
   for (const l of lines) {
-    const key = `${l.productId}-${l.size}`;
+    const key = `${l.productId}-${l.colorId ?? "x"}-${l.size}`;
     const prev = map.get(key);
     map.set(key, prev ? { ...prev, qty: prev.qty + l.qty } : { ...l });
   }
   return [...map.values()];
 }
 
+// Renk bilgisi olmayan (renkler eklenmeden önceki) sipariş kalemleri,
+// ürünün ilk rengine (migration'daki "Standart" renk) geri stoklanır.
+async function resolveColorId(tx, item) {
+  if (item.colorId) return item.colorId;
+  const c = await tx.productColor.findFirst({
+    where: { productId: item.productId },
+    orderBy: [{ position: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  return c?.id ?? null;
+}
+
 async function restock(tx, items) {
   for (const it of groupLines(items)) {
+    const colorId = await resolveColorId(tx, it);
+    if (!colorId) continue; // ürün tamamen silinmiş
     await tx.productVariant.updateMany({
-      where: { productId: it.productId, size: it.size },
+      where: { colorId, size: it.size },
       data: { stock: { increment: it.qty } },
     });
   }
@@ -56,18 +70,19 @@ export async function createPendingOrder({ userId, customer, billing, total, dis
     for (const l of groupLines(lines)) {
       // "stock >= qty" koşulu sayesinde iki kişi son ürünü aynı anda alamaz.
       const r = await tx.productVariant.updateMany({
-        where: { productId: l.productId, size: l.size, stock: { gte: l.qty } },
+        where: { colorId: l.colorId, size: l.size, stock: { gte: l.qty } },
         data: { stock: { decrement: l.qty } },
       });
       if (r.count === 0) {
         const v = await tx.productVariant.findUnique({
-          where: { productId_size: { productId: l.productId, size: l.size } },
+          where: { colorId_size: { colorId: l.colorId, size: l.size } },
         });
         const left = v?.stock ?? 0;
+        const label = `${l.name} (${l.colorName}, ${l.size})`;
         throw new OrderError(
           left > 0
-            ? `${l.name} (${l.size}) için stokta yalnızca ${left} adet kaldı. Sepetini güncelleyip tekrar dene.`
-            : `${l.name} (${l.size}) az önce tükendi. Sepetinden çıkarıp tekrar dene.`,
+            ? `${label} için stokta yalnızca ${left} adet kaldı. Sepetini güncelleyip tekrar dene.`
+            : `${label} az önce tükendi. Sepetinden çıkarıp tekrar dene.`,
           409
         );
       }
@@ -364,6 +379,7 @@ export async function getReturnableQuantities(orderId) {
     return {
       orderItemId: it.id,
       name: it.name,
+      colorName: it.colorName,
       size: it.size,
       price: it.price,
       qty: it.qty,
@@ -478,7 +494,12 @@ export async function updateReturn({ returnId, action, adminNote, restockItems =
       if (restockItems) {
         await restock(
           tx,
-          ret.items.map((ri) => ({ productId: ri.orderItem.productId, size: ri.orderItem.size, qty: ri.qty }))
+          ret.items.map((ri) => ({
+            productId: ri.orderItem.productId,
+            colorId: ri.orderItem.colorId,
+            size: ri.orderItem.size,
+            qty: ri.qty,
+          }))
         );
       }
       await addEvent(
@@ -519,7 +540,7 @@ export async function getOrderWithItems(orderId, userId) {
     total: order.total,
     discountTotal: order.discountTotal,
     paymentStatus: order.status === "pending" ? "pending" : "paid",
-    items: order.items.map((it) => ({ name: it.name, size: it.size, qty: it.qty, lineTotal: it.lineTotal })),
+    items: order.items.map((it) => ({ name: it.name, colorName: it.colorName, size: it.size, qty: it.qty, lineTotal: it.lineTotal })),
   };
 }
 

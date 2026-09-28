@@ -12,11 +12,11 @@ export default async function ProductPage({ params }) {
 
   const product = await prisma.product.findFirst({
     where: { id: productId, active: true },
-    include: { variants: true },
+    include: { colors: { where: { active: true }, include: { variants: true } } },
   });
   if (!product) notFound();
 
-  const soldOut = product.variants.every((v) => v.stock <= 0);
+  const soldOut = product.colors.every((c) => c.variants.every((v) => v.stock <= 0));
 
   return (
     <div className="mx-auto max-w-6xl p-6 sm:p-10">

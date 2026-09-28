@@ -89,7 +89,7 @@ export default async function InvoicePage({ params }) {
             <tbody className="divide-y divide-stone-100">
               {order.items.map((it) => (
                 <tr key={it.id}>
-                  <td className="py-2.5">{it.name} ({it.size})</td>
+                  <td className="py-2.5">{it.name} ({it.colorName ? `${it.colorName}, ` : ""}{it.size})</td>
                   <td className="py-2.5 text-right">{it.qty}</td>
                   <td className="py-2.5 text-right">{kurus(Math.round((it.price * 100) / (1 + rate)))}</td>
                   <td className="py-2.5 text-right">

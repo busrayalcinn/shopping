@@ -53,14 +53,15 @@ function stripeLineItems(lines) {
   const out = [];
   for (const l of lines) {
     const fullQty = l.qty - l.discountQty;
-    if (fullQty > 0) out.push(item(`${l.name} (${l.size})`, l.price, fullQty));
-    if (l.discountQty > 0) out.push(item(`${l.name} (${l.size}) · 2. ürün %20 indirimli`, l.price - l.unitDiscount, l.discountQty));
+    const label = `${l.name} (${l.colorName}, ${l.size})`;
+    if (fullQty > 0) out.push(item(label, l.price, fullQty));
+    if (l.discountQty > 0) out.push(item(`${label} · 2. ürün %20 indirimli`, l.price - l.unitDiscount, l.discountQty));
   }
   return out;
 }
 
 // POST /api/checkout  (oturum gerekli)
-// Body: { items: [{ id, size, qty }], customer: { name, address }, billing: {...} }
+// Body: { items: [{ id, colorId, size, qty }], customer: { name, address }, billing: {...} }
 // Akış:
 //   1) Sepet sunucuda yeniden doğrulanır/fiyatlandırılır (istemciye güvenilmez).
 //   2) Stok atomik olarak rezerve edilir ve sipariş 'pending' yazılır.

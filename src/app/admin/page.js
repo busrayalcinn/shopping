@@ -15,8 +15,8 @@ export default async function AdminPage() {
     prisma.order.count({ where: { status: { in: ["paid", "preparing"] } } }),
     prisma.returnRequest.count({ where: { status: { in: ["requested", "approved"] } } }),
     prisma.productVariant.findMany({
-      where: { stock: { lte: LOW_STOCK }, product: { active: true } },
-      include: { product: { select: { name: true } } },
+      where: { stock: { lte: LOW_STOCK }, product: { active: true }, color: { active: true } },
+      include: { product: { select: { name: true } }, color: { select: { name: true } } },
       orderBy: { stock: "asc" },
       take: 12,
     }),
@@ -55,7 +55,7 @@ export default async function AdminPage() {
             <ul className="mt-2 grid gap-1 text-sm text-amber-900 sm:grid-cols-2">
               {lowStock.map((v) => (
                 <li key={v.id}>
-                  {v.product.name} · {v.size}: <strong>{v.stock === 0 ? "tükendi" : `${v.stock} adet`}</strong>
+                  {v.product.name} · {v.color.name} · {v.size}: <strong>{v.stock === 0 ? "tükendi" : `${v.stock} adet`}</strong>
                 </li>
               ))}
             </ul>

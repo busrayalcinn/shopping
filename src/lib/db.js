@@ -105,37 +105,64 @@ function toStockMap(variants = []) {
   return stock;
 }
 
-// Mağaza vitrini: yalnızca satıştaki ürünler + beden bazlı stok
+const COLOR_INCLUDE = {
+  colors: {
+    where: { active: true },
+    orderBy: [{ position: "asc" }, { id: "asc" }],
+    include: { variants: true },
+  },
+};
+
+function toColor(c) {
+  const stock = toStockMap(c.variants);
+  return {
+    id: c.id,
+    name: c.name,
+    hex: c.hex,
+    imageUrl: c.imageUrl,
+    stock,
+    soldOut: Object.values(stock).every((n) => n <= 0),
+  };
+}
+
+// Mağaza vitrini: yalnızca satıştaki ürünler + renkler + renk/beden bazlı stok
 export async function getProducts() {
   const products = await prisma.product.findMany({
     where: { active: true },
     orderBy: { id: "asc" },
-    include: { variants: true },
+    include: COLOR_INCLUDE,
   });
 
-  return products.map((p) => {
-    const stock = toStockMap(p.variants);
-    return {
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      cat: p.category,
-      swatch: p.swatch,
-      text: p.textColor,
-      imageUrl: p.imageUrl,
-      stock,
-      soldOut: Object.values(stock).every((n) => n <= 0),
-    };
-  });
+  const list = products
+    .map((p) => {
+      const colors = p.colors.map(toColor);
+      return {
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        cat: p.category,
+        swatch: p.swatch,
+        text: p.textColor,
+        imageUrl: colors.find((c) => c.imageUrl)?.imageUrl || p.imageUrl,
+        colors,
+        soldOut: colors.every((c) => c.soldOut),
+      };
+    })
+    .filter((p) => p.colors.length > 0); // rengi olmayan ürün satılamaz
+    
+    const i = list.findIndex((p) => p.name.includes("Ceket"));
+    if (i !== -1) list.splice(2, 0, list.splice(i, 1)[0]);
+
+    return list;
 }
 
-// Sepet doğrulaması için: verilen id listesindeki ürünleri getirir.
+// Sepet doğrulaması için: verilen id listesindeki ürünleri renk ve stoklarıyla getirir.
 export async function getProductsByIds(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return [];
 
   const products = await prisma.product.findMany({
     where: { id: { in: ids } },
-    include: { variants: true },
+    include: COLOR_INCLUDE,
   });
 
   return products.map((p) => ({
@@ -144,7 +171,7 @@ export async function getProductsByIds(ids) {
     price: p.price,
     category: p.category,
     active: p.active,
-    stock: toStockMap(p.variants),
+    colors: p.colors.map(toColor),
   }));
 }
 

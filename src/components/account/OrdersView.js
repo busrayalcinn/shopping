@@ -89,7 +89,7 @@ function OrderCard({ order, onCancel, onReturn }) {
         {order.items.map((it) => (
           <li key={it.id} className="flex justify-between py-2.5 text-sm">
             <span>
-              {it.name} <span className="text-stone-500">· {it.size} × {it.qty}</span>
+              {it.name} <span className="text-stone-500">· {it.colorName ? `${it.colorName} · ` : ""}{it.size} × {it.qty}</span>
               {it.discountQty > 0 && <span className="ml-1.5 text-xs text-rose-700">{it.discountQty} adet %20 indirimli</span>}
             </span>
             <span>{fmtTL(it.lineTotal)}</span>
@@ -356,7 +356,7 @@ function ReturnDialog({ order, onClose }) {
           return (
             <div key={it.orderItemId} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
-                <p className="truncate text-sm">{it.name} <span className="text-stone-500">· {it.size}</span></p>
+                <p className="truncate text-sm">{it.name} <span className="text-stone-500">· {it.colorName ? `${it.colorName} · ` : ""}{it.size}</span></p>
                 <p className="text-xs text-stone-500">
                   {it.returnable > 0
                     ? `${fmtTL(Math.round(it.lineTotal / it.qty))} ödendi · en fazla ${it.returnable} adet`

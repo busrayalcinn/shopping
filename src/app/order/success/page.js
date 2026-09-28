@@ -85,7 +85,7 @@ export default async function OrderSuccessPage({ searchParams }) {
       <div className="mt-5 divide-y divide-stone-200 rounded border border-stone-200">
         {order.items.map((it, i) => (
           <div key={i} className="flex items-center justify-between px-4 py-3 text-sm">
-            <span>{it.name} · {it.size} × {it.qty}</span>
+            <span>{it.name} · {it.colorName ? `${it.colorName} · ` : ""}{it.size} × {it.qty}</span>
             <span className="font-medium">{fmt(it.lineTotal)}</span>
           </div>
         ))}

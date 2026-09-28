@@ -2,13 +2,23 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { SIZES } from "@/lib/constants";
 import { LOW_STOCK } from "@/lib/orderStatus";
 
-const SWATCHES = ["bg-stone-300", "bg-stone-800", "bg-amber-200", "bg-stone-100", "bg-indigo-300", "bg-stone-400", "bg-rose-200", "bg-emerald-200"];
 const CATEGORIES = ["Üst Giyim", "Alt Giyim", "Dış Giyim"];
+
+// Sık kullanılan renkler: isim yazılınca renk kodu otomatik dolar
+const PRESETS = {
+  Beyaz: "#f5f5f4", Siyah: "#1c1917", Bej: "#d6c7b0", Krem: "#efe6d6", Ekru: "#e9e1cf",
+  Gri: "#a09d96", Antrasit: "#3f3f46", Lacivert: "#1e2a44", Mavi: "#3b6ea8", "Açık Mavi": "#a9c4e0",
+  Haki: "#6b6b3a", Yeşil: "#3f6b4f", Bordo: "#6d1a2a", Kırmızı: "#b91c1c", Pembe: "#e8b4b8",
+  Kahverengi: "#6b4a32", Taba: "#a0653a", Vizon: "#a39585", Sarı: "#e8c547", Mor: "#6b4c8a",
+};
+
 const emptyStock = () => Object.fromEntries(SIZES.map((s) => [s, 0]));
-const emptyForm = () => ({ name: "", price: "", category: CATEGORIES[0], swatch: SWATCHES[0], textColor: "text-stone-800", imageUrl: "", stock: emptyStock() });
+const newColor = (name = "", hex = "#d6d3d1") => ({ id: null, name, hex, imageUrl: "", active: true, stock: emptyStock() });
+const emptyForm = () => ({ name: "", price: "", category: CATEGORIES[0], colors: [newColor()] });
 
 const input = "rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-900";
 
@@ -49,7 +59,7 @@ export default function ProductsPage() {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <p className="text-sm text-stone-400">Admin / Ürünler</p>
-            <h1 className="text-3xl font-semibold">Ürünler ve stok</h1>
+            <h1 className="text-3xl font-semibold">Ürünler, renkler ve stok</h1>
           </div>
           <Link href="/admin" className="rounded-full border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100">← Dashboard</Link>
         </div>
@@ -58,22 +68,21 @@ export default function ProductsPage() {
           <p className={`mb-4 rounded-lg px-4 py-2 text-sm ${msg.type === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{msg.text}</p>
         )}
 
+        <datalist id="color-presets">
+          {Object.keys(PRESETS).map((n) => <option key={n} value={n} />)}
+        </datalist>
+
         <form onSubmit={addProduct} className="mb-8 rounded-2xl border border-stone-200 bg-white p-6">
           <h2 className="mb-4 text-lg font-semibold">Yeni ürün ekle</h2>
           <div className="grid gap-3 md:grid-cols-3">
             <input placeholder="Ürün adı" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input} required />
             <input type="number" min="1" placeholder="Fiyat (₺, KDV dahil)" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className={input} required />
-            <input placeholder="Fotoğraf yolu, örn. /products/x.png" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} className={input} />
             <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={input}>
               {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
-            <select value={form.swatch} onChange={(e) => setForm({ ...form, swatch: e.target.value })} className={input}>
-              {SWATCHES.map((s) => <option key={s}>{s}</option>)}
-            </select>
           </div>
-          <p className="mt-4 text-sm text-stone-600">Beden stokları</p>
-          <StockInputs stock={form.stock} onChange={(stock) => setForm({ ...form, stock })} />
-          <button type="submit" className="mt-4 rounded-full bg-stone-900 px-6 py-2.5 text-sm font-medium text-stone-50 hover:bg-stone-700">Ürünü ekle</button>
+          <ColorsEditor colors={form.colors} onChange={(colors) => setForm({ ...form, colors })} />
+          <button type="submit" className="mt-5 rounded-full bg-stone-900 px-6 py-2.5 text-sm font-medium text-stone-50 hover:bg-stone-700">Ürünü ekle</button>
         </form>
 
         <label className="mb-3 flex items-center gap-2 text-sm text-stone-600">
@@ -84,19 +93,18 @@ export default function ProductsPage() {
         {loading ? (
           <p className="p-8 text-center text-stone-500">Yükleniyor…</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {visible.map((p) => (
               <div key={p.id} className={`rounded-2xl border bg-white p-5 ${p.active ? "border-stone-200" : "border-dashed border-stone-300 opacity-70"}`}>
-                <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_2fr]">
+                <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr]">
                   <input value={p.name} onChange={(e) => patchLocal(p.id, { name: e.target.value })} className={input} aria-label="Ürün adı" />
                   <input type="number" value={p.price} onChange={(e) => patchLocal(p.id, { price: Number(e.target.value) })} className={input} aria-label="Fiyat" />
                   <select value={p.category} onChange={(e) => patchLocal(p.id, { category: e.target.value })} className={input} aria-label="Kategori">
                     {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
-                  <input value={p.imageUrl || ""} onChange={(e) => patchLocal(p.id, { imageUrl: e.target.value })} placeholder="/products/..." className={input} aria-label="Fotoğraf yolu" />
                 </div>
 
-                <StockInputs stock={{ ...emptyStock(), ...p.stock }} onChange={(stock) => patchLocal(p.id, { stock })} />
+                <ColorsEditor colors={p.colors} onChange={(colors) => patchLocal(p.id, { colors })} />
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button onClick={() => save(`/api/admin/products/${p.id}`, "PUT", p, `“${p.name}” kaydedildi.`)} className="rounded-full bg-stone-900 px-4 py-1.5 text-sm text-white hover:bg-stone-700">
@@ -120,6 +128,63 @@ export default function ProductsPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ColorsEditor({ colors, onChange }) {
+  const update = (i, patch) => onChange(colors.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+
+  const onName = (i, name) => {
+    const preset = PRESETS[name.trim()];
+    update(i, preset ? { name, hex: preset } : { name });
+  };
+
+  // Kaydedilmemiş yeni renk listeden tamamen silinir; kayıtlı renk satıştan kaldırılır
+  // (geçmiş siparişler ve iadelerde stok iadesi için kaydı korunur).
+  const remove = (i) => {
+    const c = colors[i];
+    if (!c.id) onChange(colors.filter((_, j) => j !== i));
+    else update(i, { active: false });
+  };
+
+  return (
+    <div className="mt-5">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm text-stone-600">Renkler ve beden stokları</p>
+        <p className="hidden text-xs text-stone-400 sm:block">Fotoğraf yolu, örn. /products/gomlek-siyah.png</p>
+      </div>
+      <div className="space-y-3">
+        {colors.map((c, i) => (
+          <div key={c.id ?? `new-${i}`} className={`rounded-xl border p-3 ${c.active ? "border-stone-200" : "border-dashed border-stone-300 bg-stone-50 opacity-60"}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="h-14 w-11 shrink-0 overflow-hidden rounded-md border border-stone-200" style={{ background: c.hex }}>
+                {c.imageUrl && <img src={c.imageUrl} alt="" className="h-full w-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />}
+              </div>
+              <input type="color" value={c.hex} onChange={(e) => update(i, { hex: e.target.value })} className="h-9 w-10 cursor-pointer rounded border border-stone-300" aria-label="Renk kodu" />
+              <input list="color-presets" placeholder="Renk adı (örn. Siyah)" value={c.name} onChange={(e) => onName(i, e.target.value)} className={`${input} w-40`} aria-label="Renk adı" />
+              <input placeholder="Fotoğraf yolu" value={c.imageUrl || ""} onChange={(e) => update(i, { imageUrl: e.target.value })} className={`${input} min-w-[12rem] flex-1`} aria-label="Fotoğraf yolu" />
+              {c.active ? (
+                colors.filter((x) => x.active).length > 1 && (
+                  <button type="button" onClick={() => remove(i)} className="rounded-full p-2 text-stone-400 hover:bg-red-50 hover:text-red-600" aria-label="Rengi kaldır" title="Rengi kaldır">
+                    <Trash2 size={16} />
+                  </button>
+                )
+              ) : (
+                <button type="button" onClick={() => update(i, { active: true })} className="inline-flex items-center gap-1 rounded-full border border-stone-300 px-3 py-1.5 text-xs hover:border-stone-900">
+                  <RotateCcw size={12} /> Tekrar satışa al
+                </button>
+              )}
+            </div>
+            <StockInputs stock={{ ...emptyStock(), ...c.stock }} onChange={(stock) => update(i, { stock })} />
+          </div>
+        ))}
+      </div>
+      {colors.length < 12 && (
+        <button type="button" onClick={() => onChange([...colors, newColor()])} className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-stone-300 px-4 py-1.5 text-sm hover:border-stone-900">
+          <Plus size={14} /> Renk ekle
+        </button>
+      )}
     </div>
   );
 }
