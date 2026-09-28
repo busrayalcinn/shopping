@@ -2,8 +2,9 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ShoppingBag, X, Plus, Minus, User, Search, ArrowRight, Package } from "lucide-react";
-import { SIZES, CATS, MAX_QTY, CART_KEY } from "@/lib/constants";
+import { SIZES, CATS, MAX_QTY, CART_KEY, PENDING_CHECKOUT_KEY } from "@/lib/constants";
 import { LOW_STOCK } from "@/lib/orderStatus";
 import { CAMPAIGN, priceCart, isCampaignProduct } from "@/lib/campaign";
 
@@ -56,6 +57,31 @@ export default function Store({ products, initialUser = null }) {
     if (!cartLoaded) return;
     try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {}
   }, [cart, cartLoaded]);
+
+  // Ödeme sayfasından tarayıcının geri tuşuyla dönüldüyse ayrılan stoğu bırak.
+  // "pageshow", sayfa tarayıcı önbelleğinden (geri tuşu) geri geldiğinde de çalışır.
+  const router = useRouter();
+  useEffect(() => {
+    const release = async () => {
+      let orderId;
+      try { orderId = sessionStorage.getItem(PENDING_CHECKOUT_KEY); } catch { return; }
+      if (!orderId) return;
+      try { sessionStorage.removeItem(PENDING_CHECKOUT_KEY); } catch {}
+      setCheckout("cart"); // "Yönlendiriliyor…" durumunda takılı kalmasın
+      try {
+        await fetch("/api/checkout/abandon", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: Number(orderId) }),
+        });
+        router.refresh(); // güncel stokları yeniden yükle
+      } catch {}
+    };
+    release();
+    const onShow = (e) => { if (e.persisted) release(); };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, [router]);
 
   // Güncel stok (ürün + beden). Bilinmiyorsa MAX_QTY kabul edilir.
   const stockOf = (id, size) => products.find((p) => p.id === id)?.stock?.[size] ?? MAX_QTY;
@@ -141,6 +167,9 @@ export default function Store({ products, initialUser = null }) {
         return null;
       }
       if (!res.ok || !data.ok) return data.error || "Ödeme başlatılamadı.";
+      // Bu sekme ödeme sayfasından tarayıcının geri tuşuyla dönerse ayrılan
+      // stoğu hemen bırakabilmek için siparişi hatırla (sadece bu sekmede).
+      try { sessionStorage.setItem(PENDING_CHECKOUT_KEY, String(data.orderId)); } catch {}
       window.location.assign(data.url); // Stripe'ın barındırdığı ödeme sayfası
       return null;
     } catch {
@@ -245,7 +274,7 @@ export default function Store({ products, initialUser = null }) {
             onClick={() => setCat(CAMPAIGN.category)}
             className="mt-6 inline-flex items-center gap-2 rounded-full bg-rose-100 px-4 py-2 text-sm text-rose-900 hover:bg-rose-200"
           >
-            {CAMPAIGN.label}: iki üst giyim ürününden fiyatı düşük olana indirim uygulanır.
+            {CAMPAIGN.label}: iki üst giyim ürününden ucuz olana indirim uygulanır.
           </button>
         )}
       </section>
@@ -542,7 +571,7 @@ export default function Store({ products, initialUser = null }) {
                     onClick={() => { setCat(CAMPAIGN.category); closeCart(); }}
                     className="mb-4 w-full rounded-lg bg-rose-50 px-3 py-2 text-left text-xs text-rose-900 hover:bg-rose-100"
                   >
-                    Bir üst giyim ürünü daha ekle, fiyatı düşük olana %{CAMPAIGN.percent} indirim uygulansın. Ürünlere göz at
+                    Bir üst giyim ürünü daha ekle, ucuz olana %{CAMPAIGN.percent} indirim uygulansın. Ürünlere göz at
                   </button>
                 )}
                 <div className="space-y-1.5 text-sm">

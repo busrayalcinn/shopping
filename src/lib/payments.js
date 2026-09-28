@@ -23,13 +23,23 @@ export async function refundPayment({ paymentIntentId, amountTL, idempotencyKey 
   );
 }
 
+// Ödeme oturumunun güncel durumu. Oturum yoksa null döner; Stripe'a
+// ulaşılamazsa hata fırlatır (çağıran taraf siparişi kapatmamalı).
+export async function getCheckoutSessionState(sessionId) {
+  if (!sessionId) return null;
+  const s = await getStripe().checkout.sessions.retrieve(sessionId);
+  return { status: s.status, paymentStatus: s.payment_status, paymentIntentId: s.payment_intent };
+}
+
 // Kullanıcı ödeme sayfasından vazgeçtiğinde oturumu hemen kapatır ki
 // rezerve edilen stok 30 dk beklemeden serbest kalsın.
+// Dönüş: kapatıldıysa true, kapatılamadıysa (örn. az önce ödendi) false.
 export async function expireCheckoutSession(sessionId) {
-  if (!sessionId) return;
+  if (!sessionId) return true;
   try {
     await getStripe().checkout.sessions.expire(sessionId);
+    return true;
   } catch {
-    // Zaten süresi dolmuş / tamamlanmış olabilir; önemli değil.
+    return false;
   }
 }

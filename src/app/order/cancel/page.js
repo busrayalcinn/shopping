@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { expireCheckoutSession } from "@/lib/payments";
-import { expireOrder } from "@/lib/orders";
+import { abandonCheckout } from "@/lib/orders";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +14,7 @@ export default async function OrderCancelPage({ searchParams }) {
 
   if (user && Number.isInteger(orderId)) {
     const order = await prisma.order.findFirst({ where: { id: orderId, userId: user.id, status: "pending" } });
-    if (order) {
-      await expireCheckoutSession(order.stripeSessionId);
-      await expireOrder(order.id, "Ödeme sayfasından vazgeçildi.");
-    }
+    if (order) await abandonCheckout(order, "Ödeme sayfasından vazgeçildi.");
   }
 
   return (

@@ -3,7 +3,7 @@
 // böylece webhook iki kez gelse ya da kullanıcı iki kez tıklasa bile
 // stok iki kez düşmez / iki kez iade edilmez.
 import { prisma } from "@/lib/db";
-import { refundPayment, expireCheckoutSession } from "@/lib/payments";
+import { refundPayment, expireCheckoutSession, getCheckoutSessionState } from "@/lib/payments";
 import { createInvoiceForOrder, issueWithProvider } from "@/lib/invoice";
 import { refundForUnits } from "@/lib/campaign";
 import {
@@ -124,6 +124,37 @@ export async function expireOrder(orderId, message = "Ödeme tamamlanmadı, sipa
   });
 }
 
+// Kullanıcının ödemeyi yarıda bıraktığı sipariş için ayrılan stoğu bırakır.
+// Önce Stripe'a sorar: ödeme aslında tamamlanmışsa (webhook gecikmiş olabilir)
+// siparişi kapatmak yerine ödendi olarak işaretler. Stripe'a ulaşılamazsa hiçbir
+// şey yapmaz; bir sonraki temizlikte tekrar denenir.
+// Dönüş: "paid" | "expired" | "noop" | "unknown"
+export async function abandonCheckout(order, message = "Ödeme tamamlanmadı, sipariş kapatıldı.") {
+  if (!order || order.status !== "pending") return "noop";
+
+  const settleIfPaid = async () => {
+    const st = await getCheckoutSessionState(order.stripeSessionId);
+    if (st?.status === "complete" && st.paymentStatus === "paid") {
+      await markOrderPaid({ stripeSessionId: order.stripeSessionId, paymentIntentId: st.paymentIntentId });
+      return true;
+    }
+    return false;
+  };
+
+  try {
+    if (await settleIfPaid()) return "paid";
+    const closed = await expireCheckoutSession(order.stripeSessionId);
+    // Kapatılamadıysa o anda ödeme tamamlanmış olabilir: tekrar kontrol et
+    if (!closed && (await settleIfPaid())) return "paid";
+  } catch (e) {
+    console.error("Ödeme oturumu kontrol edilemedi:", e.message);
+    return "unknown";
+  }
+
+  await expireOrder(order.id, message);
+  return "expired";
+}
+
 export async function expireOrderBySession(stripeSessionId) {
   const order = await prisma.order.findUnique({ where: { stripeSessionId } });
   if (order) await expireOrder(order.id);
@@ -135,10 +166,20 @@ export async function releaseStalePendingOrders() {
   const cutoff = new Date(Date.now() - PENDING_TTL_MIN * 60 * 1000);
   const stale = await prisma.order.findMany({
     where: { status: "pending", createdAt: { lt: cutoff } },
-    select: { id: true },
+    select: { id: true, status: true, stripeSessionId: true },
     take: 50,
   });
-  for (const o of stale) await expireOrder(o.id);
+  for (const o of stale) await abandonCheckout(o);
+}
+
+// Aynı kullanıcı yeni bir ödeme başlatırsa, yarım kalmış önceki ödemelerinin
+// ayırdığı stok hemen serbest bırakılır.
+export async function releaseUserPendingOrders(userId) {
+  const pending = await prisma.order.findMany({
+    where: { userId, status: "pending" },
+    select: { id: true, status: true, stripeSessionId: true },
+  });
+  for (const o of pending) await abandonCheckout(o, "Yeni bir ödeme başlatıldığı için önceki ödeme kapatıldı.");
 }
 
 // =========================
@@ -226,10 +267,13 @@ export async function cancelOrder({ orderId, userId = null, byAdmin = false, rea
     );
   }
 
-  // Ödenmemiş sipariş: sadece ödeme oturumunu kapat, rezervi bırak.
+  // Ödenmemiş sipariş: ödeme oturumunu kapat, rezervi bırak.
   if (order.status === "pending") {
-    await expireCheckoutSession(order.stripeSessionId);
-    await expireOrder(order.id, "Sipariş iptal edildi (ödeme yapılmamıştı).");
+    const result = await abandonCheckout(order, "Sipariş iptal edildi (ödeme yapılmamıştı).");
+    if (result === "paid") {
+      throw new OrderError("Bu siparişin ödemesi az önce tamamlandı. Sayfayı yenileyip tekrar dene.", 409);
+    }
+    if (result === "unknown") throw new OrderError("Ödeme durumu kontrol edilemedi, biraz sonra tekrar dene.", 503);
     return { refunded: 0, refundOk: true };
   }
 

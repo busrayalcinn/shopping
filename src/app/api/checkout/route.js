@@ -5,6 +5,7 @@ import { getStripe } from "@/lib/payments";
 import {
   createPendingOrder,
   attachStripeSession,
+  releaseUserPendingOrders,
   expireOrder,
   releaseStalePendingOrders,
   OrderError,
@@ -79,7 +80,9 @@ export async function POST(req) {
   const { billing, error: billingError } = parseBilling(body, customer);
   if (billingError) return bad(billingError);
 
-  // Webhook'u kaçırmış eski bekleyen siparişlerin stoğunu serbest bırak
+  // Bu kullanıcının yarım kalmış ödemelerini ve webhook'u kaçırmış eski
+  // bekleyen siparişleri kapat; ayırdıkları stok serbest kalsın.
+  await releaseUserPendingOrders(user.id).catch(() => {});
   await releaseStalePendingOrders().catch(() => {});
 
   const { error, status, lines, total, discount, campaign } = await validateCart(body.items);
@@ -113,5 +116,5 @@ export async function POST(req) {
   }
 
   await attachStripeSession(order.id, session.id);
-  return NextResponse.json({ ok: true, url: session.url });
+  return NextResponse.json({ ok: true, url: session.url, orderId: order.id });
 }
