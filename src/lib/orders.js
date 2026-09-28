@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/db";
 import { refundPayment, expireCheckoutSession } from "@/lib/payments";
 import { createInvoiceForOrder, issueWithProvider } from "@/lib/invoice";
+import { refundForUnits } from "@/lib/campaign";
 import {
   USER_CANCELLABLE,
   ADMIN_CANCELLABLE,
@@ -50,7 +51,7 @@ async function restock(tx, items) {
 // OLUŞTURMA + STOK REZERVASYONU
 // =========================
 
-export async function createPendingOrder({ userId, customer, billing, total, lines }) {
+export async function createPendingOrder({ userId, customer, billing, total, discount = 0, campaign = null, lines }) {
   return prisma.$transaction(async (tx) => {
     for (const l of groupLines(lines)) {
       // "stock >= qty" koşulu sayesinde iki kişi son ürünü aynı anda alamaz.
@@ -78,6 +79,8 @@ export async function createPendingOrder({ userId, customer, billing, total, lin
         customerName: customer.name,
         address: customer.address,
         total,
+        discountTotal: discount,
+        campaign,
         status: "pending",
         stockReserved: true,
         billingType: billing.type,
@@ -314,7 +317,16 @@ export async function getReturnableQuantities(orderId) {
     const used = it.returnItems
       .filter((ri) => ACTIVE_RETURN_STATUSES.includes(ri.returnRequest.status))
       .reduce((s, ri) => s + ri.qty, 0);
-    return { orderItemId: it.id, name: it.name, size: it.size, price: it.price, qty: it.qty, returnable: it.qty - used };
+    return {
+      orderItemId: it.id,
+      name: it.name,
+      size: it.size,
+      price: it.price,
+      qty: it.qty,
+      lineTotal: it.lineTotal,
+      used,
+      returnable: it.qty - used,
+    };
   });
 }
 
@@ -339,8 +351,12 @@ export async function createReturnRequest({ userId, orderId, items, reason, note
     const qty = Number(it.qty);
     if (!r || !Number.isInteger(qty) || qty < 1) continue;
     if (qty > r.returnable) throw new OrderError(`${r.name} (${r.size}) için en fazla ${r.returnable} adet iade edebilirsin.`);
-    clean.push({ orderItemId: r.orderItemId, qty });
-    refundAmount += r.price * qty;
+    // Kampanya indirimi varsa müşteri ödediği tutarı geri alır (satıra orantılı)
+    const amount = refundForUnits(r, r.used, qty);
+    clean.push({ orderItemId: r.orderItemId, qty, amount });
+    refundAmount += amount;
+    r.used += qty; // aynı kalem istekte iki kez geldiyse fazla iade edilmesin
+    r.returnable -= qty;
   }
   if (clean.length === 0) throw new OrderError("İade edilecek en az bir ürün seç.");
 
@@ -457,6 +473,7 @@ export async function getOrderWithItems(orderId, userId) {
   return {
     id: order.id,
     total: order.total,
+    discountTotal: order.discountTotal,
     paymentStatus: order.status === "pending" ? "pending" : "paid",
     items: order.items.map((it) => ({ name: it.name, size: it.size, qty: it.qty, lineTotal: it.lineTotal })),
   };

@@ -90,6 +90,12 @@ export default async function OrderSuccessPage({ searchParams }) {
           </div>
         ))}
       </div>
+      {order.discountTotal > 0 && (
+        <div className="mt-4 flex justify-between text-sm text-rose-700">
+          <span>Kampanya indirimi</span>
+          <span>−{fmt(order.discountTotal)}</span>
+        </div>
+      )}
       <div className="mt-4 flex justify-between text-sm">
         <span className="text-stone-500">Toplam</span>
         <span className="font-semibold">{fmt(order.total)}</span>

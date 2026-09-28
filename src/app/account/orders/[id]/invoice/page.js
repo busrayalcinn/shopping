@@ -75,12 +75,13 @@ export default async function InvoicePage({ params }) {
         </div>
 
         <div className="mt-8 overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left">
+          <table className="w-full min-w-[640px] text-left">
             <thead className="border-b border-stone-300 text-stone-500">
               <tr>
                 <th className="py-2 font-normal">Ürün</th>
                 <th className="py-2 text-right font-normal">Adet</th>
                 <th className="py-2 text-right font-normal">Birim (KDV hariç)</th>
+                <th className="py-2 text-right font-normal">İskonto (KDV hariç)</th>
                 <th className="py-2 text-right font-normal">KDV %</th>
                 <th className="py-2 text-right font-normal">Tutar (KDV dahil)</th>
               </tr>
@@ -91,6 +92,9 @@ export default async function InvoicePage({ params }) {
                   <td className="py-2.5">{it.name} ({it.size})</td>
                   <td className="py-2.5 text-right">{it.qty}</td>
                   <td className="py-2.5 text-right">{kurus(Math.round((it.price * 100) / (1 + rate)))}</td>
+                  <td className="py-2.5 text-right">
+                    {it.price * it.qty > it.lineTotal ? `−${kurus(Math.round(((it.price * it.qty - it.lineTotal) * 100) / (1 + rate)))}` : "—"}
+                  </td>
                   <td className="py-2.5 text-right">{inv.vatRate}</td>
                   <td className="py-2.5 text-right">{kurus(it.lineTotal * 100)}</td>
                 </tr>
@@ -98,6 +102,10 @@ export default async function InvoicePage({ params }) {
             </tbody>
           </table>
         </div>
+
+        {order.discountTotal > 0 && (
+          <p className="mt-4 text-xs text-stone-500">İskonto: Üst giyimde 2. ürüne %20 indirim kampanyası ({order.discountTotal.toLocaleString("tr-TR")} ₺, KDV dahil).</p>
+        )}
 
         <dl className="ml-auto mt-6 w-full max-w-xs space-y-1.5">
           <div className="flex justify-between"><dt className="text-stone-500">Mal hizmet toplamı</dt><dd>{kurus(inv.subtotal)}</dd></div>

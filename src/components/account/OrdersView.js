@@ -16,6 +16,7 @@ import {
   fmtTL,
   fmtDate,
 } from "@/lib/orderStatus";
+import { refundForUnits } from "@/lib/campaign";
 
 export default function OrdersView({ orders }) {
   const [cancelling, setCancelling] = useState(null);
@@ -66,6 +67,9 @@ function OrderCard({ order, onCancel, onReturn }) {
         <div className="text-right">
           <Badge tone={st.tone}>{st.label}</Badge>
           <p className="mt-1 font-semibold">{fmtTL(order.total)}</p>
+          {order.discountTotal > 0 && (
+            <p className="text-xs text-rose-700">{fmtTL(order.discountTotal)} kampanya indirimi</p>
+          )}
           {order.refundedAmount > 0 && (
             <p className="text-xs text-emerald-700">{fmtTL(order.refundedAmount)} iade edildi</p>
           )}
@@ -84,7 +88,10 @@ function OrderCard({ order, onCancel, onReturn }) {
       <ul className="mt-4 divide-y divide-stone-100 border-t border-stone-100 px-5">
         {order.items.map((it) => (
           <li key={it.id} className="flex justify-between py-2.5 text-sm">
-            <span>{it.name} <span className="text-stone-500">· {it.size} × {it.qty}</span></span>
+            <span>
+              {it.name} <span className="text-stone-500">· {it.size} × {it.qty}</span>
+              {it.discountQty > 0 && <span className="ml-1.5 text-xs text-rose-700">{it.discountQty} adet %20 indirimli</span>}
+            </span>
             <span>{fmtTL(it.lineTotal)}</span>
           </li>
         ))}
@@ -292,7 +299,8 @@ function ReturnDialog({ order, onClose }) {
   }, [order.id]);
 
   const selected = (items || []).filter((it) => (qty[it.orderItemId] || 0) > 0);
-  const refund = selected.reduce((s, it) => s + it.price * qty[it.orderItemId], 0);
+  // Ödenen tutar üzerinden (kampanya indirimi düşülmüş) — sunucu da aynı hesabı yapar
+  const refund = selected.reduce((s, it) => s + refundForUnits(it, it.used, qty[it.orderItemId]), 0);
 
   const change = (it, d) =>
     setQty((q) => ({ ...q, [it.orderItemId]: Math.max(0, Math.min(it.returnable, (q[it.orderItemId] || 0) + d)) }));
@@ -350,7 +358,9 @@ function ReturnDialog({ order, onClose }) {
               <div className="min-w-0">
                 <p className="truncate text-sm">{it.name} <span className="text-stone-500">· {it.size}</span></p>
                 <p className="text-xs text-stone-500">
-                  {it.returnable > 0 ? `${fmtTL(it.price)} · en fazla ${it.returnable} adet` : "Bu ürün için iade talebi zaten var"}
+                  {it.returnable > 0
+                    ? `${fmtTL(Math.round(it.lineTotal / it.qty))} ödendi · en fazla ${it.returnable} adet`
+                    : "Bu ürün için iade talebi zaten var"}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">

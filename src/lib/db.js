@@ -142,6 +142,7 @@ export async function getProductsByIds(ids) {
     id: p.id,
     name: p.name,
     price: p.price,
+    category: p.category,
     active: p.active,
     stock: toStockMap(p.variants),
   }));

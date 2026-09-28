@@ -57,6 +57,7 @@ export default function AdminOrderCard({ order, statusLabel }) {
         </div>
         <div className="text-right">
           <p className="text-lg font-semibold">{fmtTL(order.total)}</p>
+          {order.discountTotal > 0 && <p className="text-xs text-rose-700">{fmtTL(order.discountTotal)} kampanya indirimi</p>}
           {order.refundedAmount > 0 && <p className="text-xs text-emerald-700">{fmtTL(order.refundedAmount)} iade edildi</p>}
           {order.invoice?.number && (
             <Link href={`/account/orders/${order.id}/invoice`} className="text-xs text-stone-500 underline hover:text-stone-900">
@@ -69,7 +70,10 @@ export default function AdminOrderCard({ order, statusLabel }) {
       <ul className="mt-3 space-y-1 rounded-lg bg-stone-50 px-4 py-3 text-sm text-stone-700">
         {order.items.map((it) => (
           <li key={it.id} className="flex justify-between">
-            <span>{it.name} · {it.size} × {it.qty}</span>
+            <span>
+              {it.name} · {it.size} × {it.qty}
+              {it.discountQty > 0 && <span className="ml-1.5 text-xs text-rose-700">({it.discountQty} indirimli)</span>}
+            </span>
             <span>{fmtTL(it.lineTotal)}</span>
           </li>
         ))}

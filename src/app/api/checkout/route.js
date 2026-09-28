@@ -38,6 +38,26 @@ function parseBilling(body, customer) {
   return { billing };
 }
 
+// Kampanyalı adetler Stripe'ta ayrı satır olarak gösterilir; böylece Stripe'ın
+// hesapladığı toplam, sipariş toplamıyla kuruşu kuruşuna aynı olur.
+function stripeLineItems(lines) {
+  const item = (name, unitTL, quantity) => ({
+    price_data: {
+      currency: "try",
+      product_data: { name },
+      unit_amount: Math.round(unitTL * 100), // Stripe tutarları kuruş (en küçük birim) bekler
+    },
+    quantity,
+  });
+  const out = [];
+  for (const l of lines) {
+    const fullQty = l.qty - l.discountQty;
+    if (fullQty > 0) out.push(item(`${l.name} (${l.size})`, l.price, fullQty));
+    if (l.discountQty > 0) out.push(item(`${l.name} (${l.size}) · 2. ürün %20 indirimli`, l.price - l.unitDiscount, l.discountQty));
+  }
+  return out;
+}
+
 // POST /api/checkout  (oturum gerekli)
 // Body: { items: [{ id, size, qty }], customer: { name, address }, billing: {...} }
 // Akış:
@@ -62,13 +82,13 @@ export async function POST(req) {
   // Webhook'u kaçırmış eski bekleyen siparişlerin stoğunu serbest bırak
   await releaseStalePendingOrders().catch(() => {});
 
-  const { error, status, lines, total } = await validateCart(body.items);
+  const { error, status, lines, total, discount, campaign } = await validateCart(body.items);
   if (error) return bad(error, status);
   if (total <= 0) return bad("Sepet tutarı geçersiz.");
 
   let order;
   try {
-    order = await createPendingOrder({ userId: user.id, customer, billing, total, lines });
+    order = await createPendingOrder({ userId: user.id, customer, billing, total, discount, campaign, lines });
   } catch (e) {
     if (e instanceof OrderError) return bad(e.message, e.status);
     throw e;
@@ -82,14 +102,7 @@ export async function POST(req) {
       payment_method_types: ["card"],
       customer_email: user.email,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // Stripe'ın izin verdiği en kısa süre
-      line_items: lines.map((l) => ({
-        price_data: {
-          currency: "try",
-          product_data: { name: `${l.name} (${l.size})` },
-          unit_amount: Math.round(l.price * 100), // Stripe tutarları kuruş (en küçük birim) bekler
-        },
-        quantity: l.qty,
-      })),
+      line_items: stripeLineItems(lines),
       success_url: `${origin}/order/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/order/cancel?order_id=${order.id}`,
       metadata: { orderId: String(order.id), userId: String(user.id) },

@@ -48,7 +48,9 @@ model Order {
   userId          Int
   customerName    String
   address         String
-  total           Int
+  total           Int       // ödenen tutar (indirim düşülmüş)
+  discountTotal   Int       @default(0) // kampanya indirimi, TL
+  campaign        String?   // uygulanan kampanyanın kimliği
   status          String    @default("pending")
   stripeSessionId String?   @unique
   paymentIntentId String?
@@ -91,7 +93,9 @@ model OrderItem {
   price     Int
   size      String
   qty       Int
-  lineTotal Int
+  lineTotal Int    // bu satırda ödenen tutar (indirim düşülmüş)
+  unitDiscount Int @default(0) // indirimli birim başına indirim, TL
+  discountQty  Int @default(0) // satırdaki indirimli adet
 
   order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   returnItems ReturnItem[]
@@ -163,6 +167,7 @@ model ReturnItem {
   returnId    Int
   orderItemId Int
   qty         Int
+  amount      Int @default(0) // bu kalem için iade edilecek tutar, TL
 
   returnRequest ReturnRequest @relation(fields: [returnId], references: [id], onDelete: Cascade)
   orderItem     OrderItem     @relation(fields: [orderItemId], references: [id])

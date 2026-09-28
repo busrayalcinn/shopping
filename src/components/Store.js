@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShoppingBag, X, Plus, Minus, User, Search, ArrowRight, Package } from "lucide-react";
 import { SIZES, CATS, MAX_QTY, CART_KEY } from "@/lib/constants";
 import { LOW_STOCK } from "@/lib/orderStatus";
+import { CAMPAIGN, priceCart, isCampaignProduct } from "@/lib/campaign";
 
 const fmt = (n) => `${n.toLocaleString("tr-TR")} ₺`;
 
@@ -67,7 +68,23 @@ export default function Store({ products, initialUser = null }) {
   }, [cat, query, products]);
 
   const count = cart.reduce((s, i) => s + i.qty, 0);
-  const total = cart.reduce((s, i) => s + i.qty * i.price, 0);
+  // Kampanya dahil fiyatlandırma — sunucudaki hesapla birebir aynı fonksiyon.
+  // Kategori her zaman güncel ürün listesinden okunur (eski kayıtlı sepetlerde yoktur).
+  const pricing = useMemo(
+    () =>
+      priceCart(
+        cart.map((i) => ({
+          key: `${i.id}-${i.size}`,
+          price: i.price,
+          qty: i.qty,
+          category: products.find((p) => p.id === i.id)?.cat,
+        }))
+      ),
+    [cart, products]
+  );
+  const total = pricing.total;
+  const lineOf = (key) => pricing.lines.find((l) => l.key === key);
+  const campaignUnits = pricing.lines.filter((l) => l.category === CAMPAIGN.category).reduce((s, l) => s + l.qty, 0);
 
   const addToCart = (p, size) => {
     setCart((c) => {
@@ -223,6 +240,14 @@ export default function Store({ products, initialUser = null }) {
         <h1 className="max-w-2xl text-4xl font-light leading-tight md:text-6xl">
             Tarzınızı yansıtan<br /><span className="font-semibold">kumaşlar.</span>
         </h1>
+        {CAMPAIGN.active && (
+          <button
+            onClick={() => setCat(CAMPAIGN.category)}
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-rose-100 px-4 py-2 text-sm text-rose-900 hover:bg-rose-200"
+          >
+            {CAMPAIGN.label}: iki üst giyim ürününden fiyatı düşük olana indirim uygulanır.
+          </button>
+        )}
       </section>
 
       {/* GRID */}
@@ -251,6 +276,12 @@ export default function Store({ products, initialUser = null }) {
                 <span className="absolute bottom-4 left-4 text-xs uppercase tracking-widest text-white/90">
                   {p.cat}
                 </span>
+
+                {isCampaignProduct(p) && !p.soldOut && (
+                  <span className="absolute left-3 top-3 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-medium text-white">
+                    {CAMPAIGN.shortLabel}
+                  </span>
+                )}
 
                 {p.soldOut ? (
                   <span className="absolute right-3 top-3 rounded-full bg-stone-900/80 px-3 py-1 text-xs font-medium text-stone-50">
@@ -321,6 +352,11 @@ export default function Store({ products, initialUser = null }) {
               <p className="mt-2 text-xl font-medium">
                 {fmt(preview.price)}
               </p>
+              {isCampaignProduct(preview) && (
+                <p className="mt-2 inline-block rounded-full bg-rose-100 px-3 py-1 text-xs text-rose-900">
+                  {CAMPAIGN.label} — sepette otomatik uygulanır
+                </p>
+              )}
 
               <p className="mt-4 text-sm leading-6 text-stone-600">
                 Zarif duruşu, seçkin kumaş kalitesi ve özgün tasarımıyla stilinize
@@ -420,7 +456,7 @@ export default function Store({ products, initialUser = null }) {
           </div>
 
           {checkout === "pay" ? (
-            <PayForm total={total} defaultName={user?.name} onSubmit={startStripeCheckout} onBack={() => setCheckout("cart")} />
+            <PayForm total={total} discount={pricing.discount} defaultName={user?.name} onSubmit={startStripeCheckout} onBack={() => setCheckout("cart")} />
           ) : cart.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center text-stone-400">
               <ShoppingBag size={32} />
@@ -457,7 +493,16 @@ export default function Store({ products, initialUser = null }) {
                               <p className="text-xs text-amber-700">Son {stockOf(i.id, i.size)} ürün</p>
                             )}
                           </div>
-                          <span className="text-sm">{fmt(i.price * i.qty)}</span>
+                          <span className="shrink-0 text-right text-sm">
+                            {lineOf(key)?.discountQty > 0 ? (
+                              <>
+                                <span className="block text-xs text-stone-400 line-through">{fmt(i.price * i.qty)}</span>
+                                <span className="block font-medium text-rose-700">{fmt(lineOf(key).lineTotal)}</span>
+                              </>
+                            ) : (
+                              fmt(i.price * i.qty)
+                            )}
+                          </span>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -492,10 +537,33 @@ export default function Store({ products, initialUser = null }) {
                 })}
               </div>
               <div className="border-t border-stone-200 px-5 py-5">
-                <div className="mb-4 flex justify-between text-sm">
-                  <span className="text-stone-500">Ara toplam</span>
-                  <span className="font-semibold">{fmt(total)}</span>
+                {campaignUnits % 2 === 1 && (
+                  <button
+                    onClick={() => { setCat(CAMPAIGN.category); closeCart(); }}
+                    className="mb-4 w-full rounded-lg bg-rose-50 px-3 py-2 text-left text-xs text-rose-900 hover:bg-rose-100"
+                  >
+                    Bir üst giyim ürünü daha ekle, fiyatı düşük olana %{CAMPAIGN.percent} indirim uygulansın. Ürünlere göz at
+                  </button>
+                )}
+                <div className="space-y-1.5 text-sm">
+                  {pricing.discount > 0 && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-stone-500">Ara toplam</span>
+                        <span>{fmt(pricing.subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-rose-700">
+                        <span>{CAMPAIGN.label}</span>
+                        <span>−{fmt(pricing.discount)}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-stone-500">Toplam</span>
+                    <span className="font-semibold">{fmt(total)}</span>
+                  </div>
                 </div>
+                <div className="mb-4" />
                 <button onClick={startCheckout} className="flex w-full items-center justify-center gap-2 rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 hover:bg-stone-700">
                   {user ? "Ödemeye geç" : "Giriş yap ve devam et"} <ArrowRight size={16} />
                 </button>
@@ -804,7 +872,7 @@ function AuthForm({ current, onAuth, onLogout }) {
   );
 }
 
-function PayForm({ total, defaultName, onSubmit, onBack }) {
+function PayForm({ total, discount = 0, defaultName, onSubmit, onBack }) {
   const [name, setName] = useState(defaultName || "");
   const [address, setAddress] = useState("");
   const [billingType, setBillingType] = useState("individual");
@@ -906,6 +974,12 @@ function PayForm({ total, defaultName, onSubmit, onBack }) {
       </div>
       <div className="border-t border-stone-200 px-5 py-5">
         {error && <p className="mb-3 text-xs text-red-600" role="alert">{error}</p>}
+        {discount > 0 && (
+          <div className="mb-1 flex justify-between text-sm text-rose-700">
+            <span>{CAMPAIGN.label}</span>
+            <span>−{fmt(discount)}</span>
+          </div>
+        )}
         <div className="mb-4 flex justify-between text-sm">
           <span className="text-stone-500">Ödenecek (KDV dahil)</span>
           <span className="font-semibold">{fmt(total)}</span>
