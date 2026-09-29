@@ -1,8 +1,25 @@
 import "./globals.css";
+import { SITE } from "@/lib/site";
 
 export const metadata = {
-  title: "Atölye — Mağaza",
-  description: "Tarzınızı yansıtan kumaşlar.",
+  metadataBase: new URL(SITE.url),
+  title: {
+    default: `${SITE.name} — Yeni Sezon Giyim Koleksiyonu`,
+    template: `%s | ${SITE.name}`,
+  },
+  description: SITE.description,
+  applicationName: SITE.name,
+  openGraph: {
+    type: "website",
+    locale: "tr_TR",
+    siteName: SITE.name,
+  },
+  twitter: { card: "summary_large_image" },
+  formatDetection: { telephone: false },
+};
+
+export const viewport = {
+  themeColor: "#fafaf9",
 };
 
 export default function RootLayout({ children }) {

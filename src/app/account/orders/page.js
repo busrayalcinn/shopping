@@ -5,7 +5,7 @@ import { getOrdersForUser } from "@/lib/orders";
 import OrdersView from "@/components/account/OrdersView";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Siparişlerim — Atölye" };
+export const metadata = { title: "Siparişlerim" };
 
 export default async function MyOrdersPage() {
   const user = await getSessionUser();

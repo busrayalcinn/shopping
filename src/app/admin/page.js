@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { LOW_STOCK } from "@/lib/orderStatus";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: { absolute: "Yönetim Paneli | Atölye" } };
 
 export default async function AdminPage() {
   const user = await getSessionUser();

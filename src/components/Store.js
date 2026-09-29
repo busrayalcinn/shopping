@@ -7,6 +7,9 @@ import { ShoppingBag, X, Plus, Minus, User, Search, ArrowRight, Package } from "
 import { SIZES, CATS, MAX_QTY, CART_KEY, PENDING_CHECKOUT_KEY } from "@/lib/constants";
 import { LOW_STOCK } from "@/lib/orderStatus";
 import { CAMPAIGN, priceCart, isCampaignProduct } from "@/lib/campaign";
+import { productPath, slugify } from "@/lib/site";
+import Img from "@/components/site/Img";
+import SiteFooter from "@/components/site/SiteFooter";
 
 const fmt = (n) => `${n.toLocaleString("tr-TR")} ₺`;
 
@@ -33,9 +36,21 @@ function isDark(hex = "#ffffff") {
 
 // Seçili rengin fotoğrafı. Fotoğrafı yüklenmemiş renkte, yanıltıcı olmasın diye
 // başka rengin fotoğrafı yerine rengin kendisi ve kısa bir not gösterilir.
-function ProductImage({ color, alt, className = "", style, compact = false }) {
+function ProductImage({ color, alt, className = "", style, compact = false, sizes, priority = false }) {
   if (color?.imageUrl) {
-    return <img key={color.imageUrl} src={color.imageUrl} alt={alt} className={`block ${className}`} style={style} />;
+    return (
+      <Img
+        key={color.imageUrl}
+        src={color.imageUrl}
+        alt={alt}
+        width={600}
+        height={750}
+        sizes={sizes || (compact ? "96px" : "(min-width: 768px) 448px, 100vw")}
+        priority={priority}
+        className={`block ${className}`}
+        style={style}
+      />
+    );
   }
   const hex = color?.hex || "#d6d3d1";
   return (
@@ -140,6 +155,10 @@ export default function Store({ products, initialUser = null }) {
     // /product/:id sayfasından ?product=:id ile gelindiyse ürünü aç
     const pid = Number(qs.get("product"));
     if (pid) setPreview(products.find((p) => p.id === pid) || null);
+    // Ürün sayfasındaki işaret yolundan ?kategori=ust-giyim ile gelindiyse kategoriyi seç
+    const kat = qs.get("kategori");
+    const found = kat && CATS.find((c) => slugify(c) === kat);
+    if (found) setCat(found);
   }, []);
   useEffect(() => {
     if (!cartLoaded) return;
@@ -311,7 +330,7 @@ export default function Store({ products, initialUser = null }) {
       <header className="sticky top-0 z-30 border-b border-stone-900/10 bg-stone-50/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <div className="flex items-center gap-8">
-            <span className="text-xl font-bold uppercase tracking-[0.25em]">Atölye</span>
+            <Link href="/" className="text-xl font-bold uppercase tracking-[0.25em]">Atölye</Link>
             <nav className="hidden gap-6 text-sm md:flex">
               {CATS.map((c) => (
                 <button
@@ -396,21 +415,25 @@ export default function Store({ products, initialUser = null }) {
 
       {/* GRID */}
       <main className="mx-auto max-w-6xl px-5 pb-24">
+        <h2 className="sr-only">{cat === "Tümü" ? "Tüm ürünler" : cat}</h2>
         {list.length === 0 ? (
           <p className="py-16 text-center text-sm text-stone-400">
             Aramana uyan ürün bulunamadı.
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-3 lg:grid-cols-4">
-            {list.map((p) => (
+            {list.map((p, index) => (
               <div key={p.id} className="group">
               <button
                 onClick={() => setPreview(p)}
+                aria-label={`${p.name} — hızlı bakış`}
                 className="relative block aspect-[3/4] w-full overflow-hidden rounded-xl bg-stone-100"
               >
                 <ProductImage
                   color={colorOf(p)}
-                  alt={p.name}
+                  alt={`${p.name}${colorOf(p)?.name ? ` — ${colorOf(p).name}` : ""}`}
+                  sizes="(min-width: 1152px) 272px, (min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
+                  priority={index < 2}
                   className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                 />
 
@@ -437,7 +460,9 @@ export default function Store({ products, initialUser = null }) {
                 )}
               </button>
                 <div className="mt-3 flex items-baseline justify-between gap-2">
-                  <h3 className="text-sm leading-snug">{p.name}</h3>
+                  <h3 className="text-sm leading-snug">
+                    <Link href={productPath(p)} className="hover:underline">{p.name}</Link>
+                  </h3>
                   <span className="shrink-0 text-sm font-medium">{fmt(p.price)}</span>
                 </div>
                 {p.colors.length > 1 && (
@@ -531,7 +556,13 @@ export default function Store({ products, initialUser = null }) {
                   : colorOf(preview)?.soldOut
                   ? "Bu renk tükendi, başka bir renk seç"
                   : "Beden Seç ve Sepete Ekle"}
-              </button><br></br>
+              </button>
+              <Link
+                href={productPath(preview)}
+                className="mt-3 block text-center text-sm text-stone-500 underline-offset-4 hover:text-stone-900 hover:underline"
+              >
+                Ürün detaylarını gör
+              </Link>
             </div>
           </div>
         </Modal>
@@ -743,6 +774,8 @@ export default function Store({ products, initialUser = null }) {
           )}
         </CartDrawer>
       )}
+
+      <SiteFooter />
     </div>
   );
 }
@@ -807,6 +840,7 @@ function Modal({ children, onClose }) {
   </span>
   <button
     onClick={onClose}
+    aria-label="Kapat"
     className="rounded-full p-2 text-white transition duration-300 hover:bg-white/10"
   >
     <X size={20} />
@@ -1000,6 +1034,15 @@ function AuthForm({ current, onAuth, onLogout }) {
             Şifremi unuttum
           </button>
         )}
+        {mode === "register" && (
+          <p className="text-xs leading-5 text-stone-500">
+            Kişisel verilerin{" "}
+            <Link href="/kvkk-aydinlatma-metni" target="_blank" className="underline hover:text-stone-900">KVKK Aydınlatma Metni</Link>{" "}
+            ve{" "}
+            <Link href="/gizlilik-politikasi" target="_blank" className="underline hover:text-stone-900">Gizlilik Politikası</Link>{" "}
+            kapsamında işlenir.
+          </p>
+        )}
         {error && <p className="text-xs text-red-600">{error}</p>}
         <button onClick={submit} disabled={busy}   className="mt-2 w-full rounded-full bg-stone-900 py-3 text-sm font-medium text-stone-50 transition hover:bg-stone-700 disabled:opacity-50">
 
@@ -1140,7 +1183,13 @@ function PayForm({ total, discount = 0, defaultName, onSubmit, onBack }) {
           Test modu kartı: <span className="font-mono">4242 4242 4242 4242</span>, ileri bir tarih, herhangi bir CVC.
         </p>
         <p className="text-xs text-stone-400">
-          Kargoya verilene kadar siparişini tek tıkla iptal edebilir, teslimattan sonra 14 gün içinde iade edebilirsin.
+          Kargoya verilene kadar siparişini tek tıkla iptal edebilir, teslimattan sonra 14 gün içinde{" "}
+          <Link href="/iade-ve-degisim" target="_blank" className="underline hover:text-stone-700">iade</Link> edebilirsin.
+        </p>
+        <p className="text-xs text-stone-400">
+          Teslimat ve fatura bilgilerin siparişin tamamlanması amacıyla{" "}
+          <Link href="/kvkk-aydinlatma-metni" target="_blank" className="underline hover:text-stone-700">KVKK Aydınlatma Metni</Link>{" "}
+          kapsamında işlenir.
         </p>
       </div>
       <div className="border-t border-stone-200 px-5 py-5">

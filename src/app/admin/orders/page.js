@@ -6,6 +6,7 @@ import { ORDER_STATUS } from "@/lib/orderStatus";
 import AdminOrderCard from "@/components/admin/AdminOrderCard";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Siparişler" };
 
 const TABS = [
   { key: "todo", label: "Yapılacaklar", where: { status: { in: ["paid", "preparing"] } } },

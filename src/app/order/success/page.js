@@ -12,6 +12,7 @@ const fmt = (n) => `${n.toLocaleString("tr-TR")} ₺`;
 // (örn. yerelde `stripe listen` çalışmıyorsa) kullanıcıya doğru sonucu göstermek
 // için bir yedek (defense-in-depth) doğrulamadır — tekrar tekrar çağrılsa da güvenlidir.
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Sipariş onayı" };
 
 export default async function OrderSuccessPage({ searchParams }) {
   const sessionId = (await searchParams)?.session_id;

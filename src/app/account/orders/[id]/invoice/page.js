@@ -6,6 +6,7 @@ import { SELLER } from "@/lib/invoice";
 import PrintButton from "@/components/account/PrintButton";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Fatura" };
 
 const kurus = (n) => (n / 100).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₺";
 

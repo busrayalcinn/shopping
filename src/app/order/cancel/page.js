@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { abandonCheckout } from "@/lib/orders";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Ödeme tamamlanmadı" };
 
 // Kullanıcı Stripe ödeme sayfasında "geri dön"e basarsa cancel_url burası olur.
 // Ödeme oturumu hemen kapatılır ve bu sipariş için ayrılan stok serbest bırakılır;

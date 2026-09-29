@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import AdminReturnCard from "@/components/admin/AdminReturnCard";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "İade talepleri" };
 
 const TABS = [
   { key: "open", label: "Bekleyenler", statuses: ["requested", "approved"] },

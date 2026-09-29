@@ -2,6 +2,8 @@ import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 
+export const metadata = { title: "Kullanıcılar" };
+
 export default async function UsersPage() {
   const user = await getSessionUser();
 
