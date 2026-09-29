@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { abandonCheckout } from "@/lib/orders";
@@ -22,5 +23,6 @@ export async function POST(req) {
   if (!order) return NextResponse.json({ error: "Sipariş bulunamadı." }, { status: 404 });
 
   const result = await abandonCheckout(order, "Ödeme sayfasından geri dönüldü, sipariş kapatıldı.");
+  if (result === "expired") revalidatePath("/", "layout"); // vitrindeki stok hemen güncellensin
   return NextResponse.json({ ok: true, result });
 }

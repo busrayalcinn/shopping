@@ -1,9 +1,8 @@
-// Ödeme dönüş sayfaları kişiye özeldir, arama motorlarında görünmesin
+// Bu bölüm kişiye özel; arama motorlarında görünmemeli.
 export const metadata = {
-  title: "Sipariş durumu",
   robots: { index: false, follow: false },
 };
 
-export default function OrderLayout({ children }) {
+export default function PrivateLayout({ children }) {
   return children;
 }

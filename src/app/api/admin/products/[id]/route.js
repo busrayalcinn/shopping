@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/adminGuard";
 import { parseProductInput, saveColors, productErrorResponse } from "@/lib/productInput";
@@ -20,6 +21,7 @@ export async function PUT(req, { params }) {
       await saveColors(tx, productId, colors);
       return p;
     });
+    revalidatePath("/", "layout"); // vitrin ve ürün sayfaları hemen güncellensin
     return NextResponse.json({ ok: true, product });
   } catch (e) {
     const r = productErrorResponse(e);
@@ -37,6 +39,7 @@ export async function DELETE(req, { params }) {
 
   const { id } = await params;
   await prisma.product.update({ where: { id: Number(id) }, data: { active: false } });
+  revalidatePath("/", "layout");
 
   return NextResponse.json({ ok: true });
 }

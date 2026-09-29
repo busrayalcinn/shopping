@@ -1,55 +1,56 @@
 import Link from "next/link";
-import LegalPage, { H2 } from "@/components/site/LegalPage";
-import { SITE } from "@/lib/site";
+import LegalDoc from "@/components/site/LegalDoc";
+import { SELLER } from "@/lib/invoice";
+import { RETURN_WINDOW_DAYS } from "@/lib/orderStatus";
 
 export const metadata = {
-  title: "İade ve Değişim Koşulları",
-  description: `${SITE.name} iade koşulları: kargoya verilene kadar tek tıkla iptal, teslimattan sonra 14 gün içinde iade ve kartınıza para iadesi.`,
+  title: "İade ve Değişim",
+  description: `Kargoya verilene kadar tek tıkla iptal, teslimattan sonra ${RETURN_WINDOW_DAYS} gün içinde kolay iade. Atölye iade ve değişim koşulları.`,
   alternates: { canonical: "/iade-ve-degisim" },
 };
 
-export default function ReturnsPage() {
+export default function Iade() {
   return (
-    <LegalPage title="İade ve Değişim Koşulları" updated="29 Eylül 2026">
-      <H2>Sipariş iptali</H2>
+    <LegalDoc title="İade ve Değişim" path="/iade-ve-degisim">
+      <h2>Sipariş iptali</h2>
       <p>
-        Siparişin kargoya verilene kadar <Link href="/account/orders" className="underline">Siparişlerim</Link>{" "}
-        sayfasından tek tıkla iptal edebilirsin. Ödediğin tutar aynı karta otomatik olarak iade edilir.
+        Siparişin kargoya verilene kadar <Link href="/account/orders">Siparişlerim</Link> sayfasından tek tıkla iptal edebilirsin.
+        Ödediğin tutar aynı karta iade edilir; bankana bağlı olarak 3–10 iş günü içinde hesabına yansır.
       </p>
 
-      <H2>Cayma hakkı ve iade</H2>
+      <h2>{RETURN_WINDOW_DAYS} gün içinde iade (cayma hakkı)</h2>
       <p>
-        6502 sayılı Tüketicinin Korunması Hakkında Kanun ve Mesafeli Sözleşmeler Yönetmeliği uyarınca, ürünü teslim
-        aldığın tarihten itibaren <strong>14 gün</strong> içinde herhangi bir gerekçe göstermeden cayma hakkını
-        kullanabilirsin.
+        Ürünü teslim aldığın günden itibaren {RETURN_WINDOW_DAYS} gün içinde hiçbir gerekçe göstermeden cayma hakkını kullanabilirsin.
       </p>
-      <ol className="list-decimal space-y-1 pl-5">
-        <li><Link href="/account/orders" className="underline">Siparişlerim</Link> sayfasında ilgili siparişi aç ve &quot;İade talebi&quot; oluştur.</li>
-        <li>İade etmek istediğin ürünleri, adetleri ve nedenini seç.</li>
-        <li>Talebin onaylandığında ürünleri faturasıyla birlikte, kullanılmamış ve etiketleri sökülmemiş halde kargoya ver.</li>
-        <li>Ürünler bize ulaşıp kontrol edildikten sonra ücret, ödemeyi yaptığın karta iade edilir.</li>
+      <ol className="ml-5 list-decimal space-y-1">
+        <li><Link href="/account/orders">Siparişlerim</Link> sayfasından siparişini bul ve &quot;İade talebi oluştur&quot;a tıkla.</li>
+        <li>İade etmek istediğin ürünleri, adetlerini ve iade nedenini seç.</li>
+        <li>Talebin en geç 2 iş günü içinde onaylanır; durumunu aynı sayfadan takip edebilirsin.</li>
+        <li>Ürünleri, cayma bildiriminden itibaren 10 gün içinde, mümkünse orijinal ambalajıyla [anlaşmalı kargo firması ve iade kodu] ile gönder.</li>
+        <li>Ödediğin tutar, cayma bildiriminin bize ulaşmasından itibaren en geç 14 gün içinde aynı karta iade edilir.</li>
       </ol>
+      <p>[İade kargo ücretinin kime ait olduğunu buraya yaz: ör. &quot;Anlaşmalı kargo ile gönderimlerde iade kargo ücretsizdir.&quot;]</p>
       <p>
-        Kartına yansıma süresi bankana göre değişebilir. Kampanya indirimi uygulanmış ürünlerde iade tutarı,
-        ödediğin indirimli tutar üzerinden hesaplanır.
+        Kampanyalı alışverişlerde iade tutarı, ürün için fiilen ödediğin tutar üzerinden hesaplanır.
       </p>
 
-      <H2>İade edilemeyen ürünler</H2>
+      <h2>Değişim</h2>
       <p>
-        Hijyen nedeniyle ambalajı açılmış iç giyim ve mayo gibi ürünler ile kullanılmış, yıkanmış veya zarar görmüş
-        ürünler iade alınamaz.
+        Beden veya renk değişimi için ürünü iade edip istediğin beden ya da rengi yeni bir siparişle alabilirsin. Böylece yeni
+        ürün stokta beklemeden sana ulaşır.
       </p>
 
-      <H2>Değişim</H2>
+      <h2>Kusurlu veya yanlış ürün</h2>
       <p>
-        Beden veya renk değişimi için mevcut ürünü iade edip yeni siparişi ayrıca oluşturabilirsin; böylece istediğin
-        beden stoktan hemen senin için ayrılır.
+        Ürün kusurlu ya da siparişinden farklı geldiyse iade talebinde nedeni belirtmen yeterli. 6502 sayılı Tüketicinin Korunması
+        Hakkında Kanun kapsamındaki seçimlik hakların (ücretsiz onarım, değişim, bedel iadesi veya indirim) saklıdır; bu durumda
+        kargo ücreti bize aittir.
       </p>
 
-      <H2>Sorun mu var?</H2>
+      <h2>Soruların için</h2>
       <p>
-        Hasarlı veya yanlış ürün ulaştıysa lütfen <Link href="/iletisim" className="underline">bizimle iletişime geç</Link>.
+        <Link href="/iletisim">İletişim</Link> sayfasından ya da <a href={`mailto:${SELLER.email}`}>{SELLER.email}</a> adresinden bize ulaşabilirsin.
       </p>
-    </LegalPage>
+    </LegalDoc>
   );
 }

@@ -1,9 +1,8 @@
-// Yönetim paneli arama motorlarında görünmesin
+// Bu bölüm kişiye özel; arama motorlarında görünmemeli.
 export const metadata = {
-  title: { default: "Yönetim Paneli", template: "%s — Yönetim | Atölye" },
   robots: { index: false, follow: false },
 };
 
-export default function AdminLayout({ children }) {
+export default function PrivateLayout({ children }) {
   return children;
 }

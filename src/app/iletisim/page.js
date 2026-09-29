@@ -1,50 +1,83 @@
-import { Mail, MapPin, Phone, Clock } from "lucide-react";
+import { Phone, Mail, MapPin, Clock } from "lucide-react";
 import PageShell from "@/components/site/PageShell";
-import { SITE, telHref } from "@/lib/site";
-import { JsonLd, organizationLd } from "@/lib/seo";
+import JsonLd from "@/components/site/JsonLd";
+import { SITE, telHref, absoluteUrl } from "@/lib/site";
+import { SELLER } from "@/lib/invoice";
 
 export const metadata = {
   title: "İletişim",
-  description: `${SITE.name} müşteri hizmetleri: sipariş, kargo, iade ve değişim soruların için telefon ve e-posta ile bize ulaş.`,
+  description: `${SITE.name} müşteri hizmetleri: sipariş, iade ve beden soruların için telefon ve e-posta ile bize ulaş. ${SITE.hours}.`,
   alternates: { canonical: "/iletisim" },
 };
 
 export default function ContactPage() {
-  const tel = telHref(SITE.phone);
+  const address = SITE.address || SELLER.address;
   const rows = [
-    tel && { icon: Phone, label: "Telefon", value: <a href={tel} className="hover:underline">{SITE.phone}</a> },
-    SITE.email && { icon: Mail, label: "E-posta", value: <a href={`mailto:${SITE.email}`} className="hover:underline">{SITE.email}</a> },
-    SITE.address && { icon: MapPin, label: "Adres", value: SITE.address },
+    SITE.phone && { icon: Phone, label: "Telefon", value: SITE.phone, href: telHref() },
+    SITE.email && { icon: Mail, label: "E-posta", value: SITE.email, href: `mailto:${SITE.email}` },
     { icon: Clock, label: "Çalışma saatleri", value: SITE.hours },
+    address && {
+      icon: MapPin,
+      label: "Adres",
+      value: address,
+      href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`,
+    },
   ].filter(Boolean);
 
   return (
-    <PageShell breadcrumbs={[{ name: "İletişim" }]}>
-      <JsonLd data={organizationLd()} />
-      <h1 className="text-3xl font-light">İletişim</h1>
-      <p className="mt-3 text-sm text-stone-500">
-        Sipariş, kargo, iade ve değişim soruların için bize aşağıdaki kanallardan ulaşabilirsin.
-        Siparişinle ilgili yazarken sipariş numaranı eklemen işimizi hızlandırır.
+    <PageShell title="İletişim" breadcrumbs={[{ name: "İletişim", href: "/iletisim" }]}>
+      <p className="mt-4 text-stone-600">
+        Sipariş, iade ya da beden seçimiyle ilgili her sorunda bize ulaşabilirsin. Siparişinle ilgili yazıyorsan sipariş numaranı eklersen daha hızlı yardımcı oluruz.
       </p>
 
       <ul className="mt-8 divide-y divide-stone-200 rounded-2xl border border-stone-200 bg-white">
-        {rows.map(({ icon: Icon, label, value }) => (
-          <li key={label} className="flex items-start gap-4 px-5 py-4">
-            <Icon size={18} className="mt-0.5 shrink-0 text-stone-400" aria-hidden="true" />
+        {rows.map(({ icon: Icon, label, value, href }) => (
+          <li key={label} className="flex items-start gap-4 p-5">
+            <Icon size={20} className="mt-0.5 shrink-0 text-stone-500" aria-hidden="true" />
             <div>
-              <p className="text-xs uppercase tracking-wide text-stone-400">{label}</p>
-              <p className="mt-0.5 text-sm text-stone-800">{value}</p>
+              <p className="text-sm text-stone-500">{label}</p>
+              {href ? (
+                <a href={href} className="font-medium hover:underline" {...(href.startsWith("http") && { target: "_blank", rel: "noopener" })}>{value}</a>
+              ) : (
+                <p className="font-medium">{value}</p>
+              )}
             </div>
           </li>
         ))}
       </ul>
 
-      {SITE.legalName && (
-        <p className="mt-6 text-xs text-stone-400">
-          {SITE.legalName}
-          {SITE.taxOffice && SITE.taxId ? ` · ${SITE.taxOffice} V.D. ${SITE.taxId}` : ""}
-        </p>
-      )}
+      <section className="mt-10 text-sm text-stone-600">
+        <h2 className="text-lg font-medium text-stone-900">Satıcı bilgileri</h2>
+        <dl className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-[auto_1fr]">
+          <dt className="text-stone-500">Unvan</dt><dd>{SELLER.name}</dd>
+          <dt className="text-stone-500">Adres</dt><dd>{SELLER.address}</dd>
+          <dt className="text-stone-500">Vergi dairesi / no</dt><dd>{SELLER.taxOffice} / {SELLER.taxId}</dd>
+          <dt className="text-stone-500">E-posta</dt><dd>{SELLER.email}</dd>
+        </dl>
+      </section>
+
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "ContactPage",
+          url: absoluteUrl("/iletisim"),
+          mainEntity: {
+            "@type": "Organization",
+            name: SITE.name,
+            url: absoluteUrl("/"),
+            ...(SITE.email && { email: SITE.email }),
+            ...(SITE.phone && {
+              contactPoint: {
+                "@type": "ContactPoint",
+                telephone: telHref().replace("tel:", ""),
+                contactType: "customer service",
+                areaServed: "TR",
+                availableLanguage: "Turkish",
+              },
+            }),
+          },
+        }}
+      />
     </PageShell>
   );
 }

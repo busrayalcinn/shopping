@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/adminGuard";
 import { parseProductInput, saveColors, productErrorResponse } from "@/lib/productInput";
@@ -40,6 +41,7 @@ export async function POST(req) {
       await saveColors(tx, p.id, colors);
       return p;
     });
+    revalidatePath("/", "layout"); // vitrin ve ürün sayfaları hemen güncellensin
     return NextResponse.json({ ok: true, product });
   } catch (e) {
     const r = productErrorResponse(e);

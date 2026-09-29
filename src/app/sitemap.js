@@ -1,35 +1,26 @@
-import { prisma } from "@/lib/db";
-import { SITE, productPath, LEGAL_LINKS } from "@/lib/site";
+import { getProducts } from "@/lib/db";
+import { absoluteUrl } from "@/lib/site";
+import { CATEGORIES, categoryPath, productPath } from "@/lib/seo";
 
-// /sitemap.xml — her istekte güncel ürün listesiyle üretilir (en fazla saatte bir).
-export const revalidate = 3600;
+export const revalidate = 3600; // saatte bir yenilenir
 
+// /sitemap.xml — Google'a indekslenecek tüm sayfaları bildirir
 export default async function sitemap() {
+  const products = await getProducts().catch(() => []);
   const now = new Date();
-  const pages = [
-    { url: SITE.url, lastModified: now, changeFrequency: "daily", priority: 1 },
-    ...LEGAL_LINKS.map((l) => ({ url: `${SITE.url}${l.href}`, changeFrequency: "yearly", priority: 0.3 })),
-  ];
 
-  let products = [];
-  try {
-    products = await prisma.product.findMany({
-      where: { active: true, colors: { some: { active: true } } },
-      select: { id: true, name: true, createdAt: true },
-      orderBy: { id: "asc" },
-    });
-  } catch (err) {
-    // Veritabanına ulaşılamazsa (örn. build sırasında) statik sayfalarla devam et
-    console.error("sitemap: ürünler okunamadı", err.message);
-  }
+  const staticPages = ["/iletisim", "/iade-ve-degisim", "/mesafeli-satis-sozlesmesi", "/on-bilgilendirme-formu", "/kvkk", "/cerez-politikasi"];
 
   return [
-    ...pages,
+    { url: absoluteUrl("/"), lastModified: now, changeFrequency: "daily", priority: 1 },
+    ...CATEGORIES.map((c) => ({ url: absoluteUrl(categoryPath(c.name)), lastModified: now, changeFrequency: "daily", priority: 0.8 })),
     ...products.map((p) => ({
-      url: `${SITE.url}${productPath(p)}`,
-      lastModified: p.createdAt,
+      url: absoluteUrl(productPath(p)),
+      lastModified: now,
       changeFrequency: "weekly",
-      priority: 0.8,
+      priority: 0.7,
+      images: p.colors.filter((c) => c.imageUrl).map((c) => absoluteUrl(c.imageUrl)),
     })),
+    ...staticPages.map((path) => ({ url: absoluteUrl(path), lastModified: now, changeFrequency: "yearly", priority: 0.3 })),
   ];
 }

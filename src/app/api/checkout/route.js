@@ -74,6 +74,11 @@ export async function POST(req) {
   let body;
   try { body = await req.json(); } catch { return bad("Geçersiz istek gövdesi (JSON bekleniyor)."); }
 
+  // Mesafeli Sözleşmeler Yönetmeliği: ön bilgilendirme ve sözleşme ödeme öncesinde onaylanmalı
+  if (body.acceptedTerms !== true) {
+    return bad("Devam etmek için Ön Bilgilendirme Formu ve Mesafeli Satış Sözleşmesi'ni onaylamalısın.");
+  }
+
   const customer = { name: str(body.customer?.name, 120), address: str(body.customer?.address, 500) };
   if (!customer.name) return bad("Ad Soyad zorunlu.");
   if (!customer.address) return bad("Teslimat adresi zorunlu.");

@@ -1,75 +1,59 @@
-import { SITE, absoluteUrl } from "@/lib/site";
+// URL'ler ve kategori bilgileri. İstemci ve sunucu ortak kullanır (Prisma import etmez).
 
-// Google zengin sonuçları için JSON-LD. "<" kaçırılır ki metin içindeki
-// "</script>" etiketi sayfayı bozmasın.
-export function JsonLd({ data }) {
-  return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, "\\u003c") }}
-    />
-  );
+export const CATEGORIES = [
+  {
+    name: "Üst Giyim",
+    slug: "ust-giyim",
+    title: "Kadın Üst Giyim: Keten Gömlek, Kazak ve Tişört",
+    description:
+      "Keten gömlek, yün karışımlı kazak, triko hırka ve basic tişört modelleri. 14 gün içinde kolay iade.",
+  },
+  {
+    name: "Alt Giyim",
+    slug: "alt-giyim",
+    title: "Kadın Alt Giyim: Yüksek Bel Pantolon, Jean ve Etek",
+    description:
+      "Yüksek bel pantolon, geniş paça jean ve pileli midi etek modelleri. 14 gün içinde kolay iade.",
+  },
+  {
+    name: "Dış Giyim",
+    slug: "dis-giyim",
+    title: "Kadın Dış Giyim: Trençkot ve Ceket",
+    description:
+      "Uzun trençkot modelleri. Yeni sezon dış giyim parçaları, 14 gün içinde kolay iade.",
+  },
+];
+
+export const categoryBySlug = (slug) => CATEGORIES.find((c) => c.slug === slug) || null;
+export const categoryByName = (name) => CATEGORIES.find((c) => c.name === name) || null;
+
+export function categoryPath(name) {
+  const c = categoryByName(name);
+  return c ? `/kategori/${c.slug}` : "/";
 }
 
-export function breadcrumbLd(items) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: items.map((it, i) => ({
-      "@type": "ListItem",
-      position: i + 1,
-      name: it.name,
-      ...(it.href ? { item: absoluteUrl(it.href) } : {}),
-    })),
-  };
+// Türkçe karakterleri sadeleştirip URL'ye uygun hale getirir
+export function slugify(text = "") {
+  const map = { ç: "c", ğ: "g", ı: "i", İ: "i", ö: "o", ş: "s", ü: "u", Ç: "c", Ğ: "g", Ö: "o", Ş: "s", Ü: "u" };
+  return text
+    .replace(/[çğıİöşüÇĞÖŞÜ]/g, (ch) => map[ch])
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-export function organizationLd() {
-  return {
-    "@context": "https://schema.org",
-    "@type": "OnlineStore",
-    name: SITE.name,
-    url: SITE.url,
-    description: SITE.description,
-    ...(SITE.legalName ? { legalName: SITE.legalName } : {}),
-    ...(SITE.email ? { email: SITE.email } : {}),
-    ...(SITE.phone ? { telephone: SITE.phone } : {}),
-    ...(SITE.address ? { address: { "@type": "PostalAddress", streetAddress: SITE.address, addressCountry: "TR" } } : {}),
-    ...(SITE.phone || SITE.email
-      ? {
-          contactPoint: {
-            "@type": "ContactPoint",
-            contactType: "customer service",
-            areaServed: "TR",
-            availableLanguage: "Turkish",
-            ...(SITE.phone ? { telephone: SITE.phone } : {}),
-            ...(SITE.email ? { email: SITE.email } : {}),
-          },
-        }
-      : {}),
-    hasMerchantReturnPolicy: returnPolicyLd(),
-  };
+// Ürün adresi: /urun/oversize-keten-gomlek-1  (sondaki sayı ürün numarası)
+export function productPath(p) {
+  return `/urun/${slugify(p.name)}-${p.id}`;
 }
 
-export function websiteLd() {
-  return {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: SITE.name,
-    url: SITE.url,
-    inLanguage: "tr-TR",
-  };
+export function productIdFromSlug(slug = "") {
+  const m = /-(\d+)$/.exec(slug) || /^(\d+)$/.exec(slug);
+  return m ? Number(m[1]) : null;
 }
 
-// Mağazanın iade kuralı: teslimattan sonra 14 gün, kargoyla.
-// İade kargosu ücretsizse returnFees: "https://schema.org/FreeReturn" eklenebilir.
-export function returnPolicyLd() {
-  return {
-    "@type": "MerchantReturnPolicy",
-    applicableCountry: "TR",
-    returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
-    merchantReturnDays: 14,
-    returnMethod: "https://schema.org/ReturnByMail",
-    merchantReturnLink: absoluteUrl("/iade-ve-degisim"),
-  };
+// Metin içindeki fazla boşlukları temizleyip belirli uzunlukta keser (meta açıklama için)
+export function clip(text, max = 155) {
+  const t = text.replace(/\s+/g, " ").trim();
+  return t.length <= max ? t : `${t.slice(0, max - 1).replace(/\s+\S*$/, "")}…`;
 }
